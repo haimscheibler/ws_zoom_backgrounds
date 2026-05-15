@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>{{ full_name }} — {{ company_name }}</title>
+  <style>
+    /* Reset to a fixed 1920x1080 canvas. The Playwright viewport matches this
+       so the headless browser records exactly what's on screen, no scaling. */
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 1920px;
+      height: 1080px;
+      overflow: hidden;
+      background: #0a1626;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      color: #fff;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Layered background. Bottom: deep brand-tinted base. Mid: two large
+       radial gradients that drift in opposite directions on a 10s loop —
+       gives the "ambient breathing" effect Zoom's matting tolerates. */
+    .stage {
+      position: relative;
+      width: 1920px;
+      height: 1080px;
+      background:
+        radial-gradient(ellipse 1800px 1200px at 50% 50%,
+          {{ brand_color }}33 0%,
+          {{ brand_color }}11 35%,
+          #0a1626 70%);
+    }
+
+    .blob {
+      position: absolute;
+      width: 1400px;
+      height: 1400px;
+      border-radius: 50%;
+      filter: blur(120px);
+      opacity: 0.55;
+      mix-blend-mode: screen;
+      will-change: transform, opacity;
+    }
+    .blob-a {
+      left: -300px;
+      top: -300px;
+      background: {{ brand_color }};
+      animation: driftA 10s ease-in-out infinite;
+    }
+    .blob-b {
+      right: -300px;
+      bottom: -300px;
+      background: {{ brand_color }};
+      animation: driftB 10s ease-in-out infinite;
+    }
+    /* Symmetric drift — both blobs are at their starting position at t=0
+       AND t=10s, so the loop is seamless (Zoom requires matched first/last
+       frames for clean looping). */
+    @keyframes driftA {
+      0%, 100% { transform: translate(0, 0)         scale(1.00); opacity: 0.50; }
+      50%      { transform: translate(220px, 140px) scale(1.08); opacity: 0.65; }
+    }
+    @keyframes driftB {
+      0%, 100% { transform: translate(0, 0)           scale(1.00); opacity: 0.45; }
+      50%      { transform: translate(-220px, -140px) scale(1.10); opacity: 0.60; }
+    }
+
+    /* Top-right: company logo with gentle pulse. White circular plate behind
+       so logos with transparency stay visible against the brand-tinted
+       background. Slow scale pulse (0.96 → 1.00) is below Zoom's "fast
+       motion" threshold. */
+    .logo-mark {
+      position: absolute;
+      top: 56px;
+      right: 56px;
+      width: 140px;
+      height: 140px;
+      border-radius: 50%;
+      background: #fff;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      animation: pulse 10s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { transform: scale(0.96); }
+      50%      { transform: scale(1.00); }
+    }
+    .logo-mark img {
+      max-width: 100px;
+      max-height: 100px;
+      object-fit: contain;
+    }
+
+    /* Lower-left nametag. Persistent, no animation — the user wants to be
+       readable for the full meeting. Brand color used as the accent bar on
+       the left so the eye picks up the company identity. */
+    .nametag {
+      position: absolute;
+      left: 80px;
+      bottom: 88px;
+      max-width: 720px;
+      padding: 24px 36px 24px 32px;
+      background: rgba(10, 22, 38, 0.72);
+      backdrop-filter: blur(12px);
+      border-left: 6px solid {{ brand_color }};
+      border-radius: 12px;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+    }
+    .nametag .name {
+      font-size: 44px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      line-height: 1.1;
+      margin: 0;
+    }
+    .nametag .title {
+      font-size: 22px;
+      font-weight: 400;
+      opacity: 0.85;
+      margin: 6px 0 0;
+    }
+    .nametag .company {
+      font-size: 18px;
+      font-weight: 600;
+      color: #fff;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      margin: 14px 0 0;
+      padding-top: 12px;
+      border-top: 1px solid rgba(255, 255, 255, 0.18);
+    }
+    .nametag .company .accent {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: {{ brand_color }};
+      margin-right: 10px;
+      vertical-align: middle;
+    }
+  </style>
+</head>
+<body>
+  <div class="stage">
+    <div class="blob blob-a"></div>
+    <div class="blob blob-b"></div>
+
+    {% if logo_url %}
+    <div class="logo-mark">
+      <img src="{{ logo_url }}" alt="{{ company_name }}">
+    </div>
+    {% endif %}
+
+    <div class="nametag">
+      <p class="name">{{ full_name }}</p>
+      {% if title %}<p class="title">{{ title }}</p>{% endif %}
+      <p class="company"><span class="accent"></span>{{ company_name }}</p>
+    </div>
+  </div>
+</body>
+</html>

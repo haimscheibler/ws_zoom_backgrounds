@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.env
+*.egg-info/
+
+# Node
+node_modules/
+.next/
+*.tsbuildinfo
+next-env.d.ts
+
+# Render output (regenerable)
+render-svc/app/static/output/*.mp4
+render-svc/app/static/output/*.webm
+render-svc/app/static/output/*.png
+
+# OS / IDE
+.DS_Store
+.vscode/
+.idea/

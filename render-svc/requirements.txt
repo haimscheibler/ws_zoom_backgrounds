@@ -1,0 +1,17 @@
+fastapi>=0.115
+uvicorn[standard]>=0.34
+pydantic>=2.6
+python-multipart>=0.0.9
+python-dotenv>=1.0
+
+# Brand scraping (ported from booth_event_scanner)
+requests>=2.31
+beautifulsoup4>=4.12
+lxml>=5.0
+colorthief>=0.2.1
+Pillow>=10.0
+
+# HTML → video pipeline
+Jinja2>=3.1
+playwright>=1.44
+imageio-ffmpeg>=0.5      # Static ffmpeg binary — no system dep
