@@ -9,6 +9,20 @@ MVP — single-user flow: input company URL + name/title → animated MP4 downlo
 Later phases: directory sync, Zoom Marketplace auto-deploy, calendar-triggered
 per-meeting personalization. See sibling folder `ws_Interactive_Zoom_Backgrounds/02_PROJECT_PLAN.md`.
 
+## Enrichment + quality gate
+Mirrors `Automated_Email_Signatures` policy: for each request we
+  1. Query **Apollo** `/v1/people/match` with `(first_name, last_name, domain)`
+     for the person's photo/LinkedIn and the company's logo, color source,
+     and socials.
+  2. Fall back to **homepage scraping** for any field Apollo didn't supply
+     (typically just the logo when Apollo had no org record).
+  3. Reject the request with HTTP 422 if neither path yielded a company
+     logo **nor** a real profile photo. We won't ship a background built
+     from a domain alone.
+
+Set `APOLLO_API_KEY` in `render-svc/.env` — copy from
+`Automated_Email_Signatures/.env`.
+
 ## Layout
 ```
 render-svc/          FastAPI service: brand scrape → HTML → Playwright video → MP4

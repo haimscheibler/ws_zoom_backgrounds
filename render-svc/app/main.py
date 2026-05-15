@@ -25,7 +25,9 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from .brand_scraper import scrape_brand
+from . import photo as photo_mod
+from .apollo import enrich as apollo_enrich
+from .brand_scraper import BrandAssets, brand_from_apollo, scrape_brand
 from .models import BackgroundRequest, BackgroundResponse
 from .render import OUTPUT_DIR_DEFAULT, render_background
 
@@ -79,6 +81,16 @@ def _public_url(relative_path: str) -> str:
     return relative_path
 
 
+def _split_name(full_name: str) -> tuple[str, str]:
+    """Split a free-form name into (first, last). Last name absorbs every
+    token after the first — handles 'Mary Jane van der Berg' as
+    ('Mary', 'Jane van der Berg'), which is what Apollo's matcher expects."""
+    parts = full_name.strip().split(None, 1)
+    if not parts:
+        return "", ""
+    return parts[0], parts[1] if len(parts) > 1 else ""
+
+
 @app.get("/healthz")
 def healthz() -> dict:
     return {"status": "ok"}
@@ -94,20 +106,81 @@ async def generate(req: BackgroundRequest) -> BackgroundResponse:
     log.info("generate: %s @ %s", req.full_name, domain)
 
     loop = asyncio.get_event_loop()
+    first_name, last_name = _split_name(req.full_name)
 
-    # Brand scrape is HTTP-bound (homepage fetch + logo fetch); run off-loop.
-    brand = await loop.run_in_executor(None, scrape_brand, domain)
-    log.info("    brand: company=%s logo=%s color=%s",
-             brand.company_name, bool(brand.logo_url), brand.brand_color)
+    # 1. Apollo enrichment (HTTP-bound). Returns an empty object when the
+    #    API key is unset or Apollo has no match — never raises.
+    apollo = await loop.run_in_executor(
+        None, apollo_enrich, first_name, last_name, domain,
+    )
+    log.info("    apollo: person=%s org=%s photo=%s logo=%s",
+             apollo.found_person(), apollo.found_org(),
+             bool(apollo.photo_url), bool(apollo.org_logo_url))
+
+    # 2. Brand assets. Try Apollo's org block first — it's pre-curated and
+    #    avoids a homepage scrape — then fall through to homepage scraping
+    #    when Apollo didn't return an org, or returned one without a logo.
+    def _build_brand() -> tuple[BrandAssets, str]:
+        b = brand_from_apollo(apollo, domain) if apollo.found_org() else None
+        if b is not None and b.logo_url:
+            return b, "apollo"
+        # Apollo missed or had no logo — scrape the homepage. If Apollo did
+        # give us a company_name/socials, we don't lose them: the scrape
+        # result replaces the BrandAssets wholesale, but logo + color come
+        # from the homepage which is what we actually needed.
+        return scrape_brand(domain), "scrape" if b is None else "scrape+apollo-org"
+
+    brand, brand_source = await loop.run_in_executor(None, _build_brand)
+    log.info("    brand: source=%s company=%s logo=%s color=%s",
+             brand_source, brand.company_name, bool(brand.logo_url), brand.brand_color)
+
+    # 3. Profile photo. Apollo first, then Gravatar via Apollo's email if
+    #    we have one. UI-Avatars initials are NOT in the chain on purpose —
+    #    initials would defeat the quality gate's intent.
+    photo_url, photo_source = await loop.run_in_executor(
+        None, photo_mod.resolve_photo, apollo.photo_url, apollo.email,
+    )
+
+    # 4. QUALITY GATE. Mirror the email-signatures intent: don't ship a
+    #    branded artifact when we found neither a company logo nor a real
+    #    profile photo for this person.
+    if not brand.logo_url and not photo_url:
+        log.warning("    GATE FAILED: no logo, no photo for %s @ %s",
+                    req.full_name, domain)
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"Could not enrich {req.full_name} @ {domain}: Apollo had no "
+                f"match and the company homepage didn't yield a logo. We "
+                f"require at least a company logo or a profile photo to "
+                f"generate a background. Try a different person, verify the "
+                f"company URL, or check that APOLLO_API_KEY is set."
+            ),
+        )
+
+    # Title: caller's input wins, fall back to Apollo's canonical title.
+    effective_title = req.title or apollo.title
+
+    # Merge socials — Apollo org socials + anything the scraper found.
+    socials = dict(brand.socials)
+    if apollo.linkedin_url and "linkedin" not in socials:
+        # Person's LinkedIn is more useful than the org's for a personal bg.
+        socials.setdefault("linkedin", apollo.linkedin_url)
+
+    enrichment_source = (
+        "apollo+scrape" if apollo.found_org() and brand_source.startswith("scrape")
+        else "apollo" if brand_source == "apollo"
+        else "scrape"
+    )
 
     loop_seconds = int(os.environ.get("LOOP_SECONDS", "10"))
     fps = int(os.environ.get("VIDEO_FPS", "30"))
 
-    # Render is CPU-bound (Playwright + ffmpeg); run off-loop.
+    # 5. Render (CPU-bound — Playwright + ffmpeg).
     result = await loop.run_in_executor(
         None,
         render_background,
-        req.full_name, req.title, brand, None, loop_seconds, fps,
+        req.full_name, effective_title, brand, None, loop_seconds, fps,
     )
 
     return BackgroundResponse(
@@ -118,4 +191,9 @@ async def generate(req: BackgroundRequest) -> BackgroundResponse:
         domain=domain,
         logo_url=brand.logo_url,
         brand_color=brand.brand_color,
+        photo_url=photo_url,
+        photo_source=photo_source,
+        linkedin_url=apollo.linkedin_url,
+        socials=socials,
+        enrichment_source=enrichment_source,
     )

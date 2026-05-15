@@ -5,6 +5,10 @@ __pycache__/
 .env
 *.egg-info/
 
+# Apollo lookup cache (per-deployment, regenerable)
+.apollo_cache.json
+render-svc/app/.apollo_cache.json
+
 # Node
 node_modules/
 .next/

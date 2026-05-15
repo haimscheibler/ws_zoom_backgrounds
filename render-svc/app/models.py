@@ -24,3 +24,12 @@ class BackgroundResponse(BaseModel):
     domain: str
     logo_url: str
     brand_color: str        # #RRGGBB, WCAG-darkened if needed
+
+    # Enrichment metadata — captured for downstream features (corner-photo
+    # crossfade, social-icon overlays) and exposed so the caller can see
+    # which source filled each field.
+    photo_url: str = ""
+    photo_source: str = "none"      # apollo | gravatar | none
+    linkedin_url: str = ""
+    socials: dict[str, str] = {}    # {linkedin: url, twitter: url, ...}
+    enrichment_source: str = ""     # apollo+scrape | apollo-only | scrape-only | none
