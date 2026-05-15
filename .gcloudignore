@@ -1,0 +1,25 @@
+.gcloudignore
+.git
+.gitignore
+.DS_Store
+.claude/
+
+# Python
+render-svc/.venv/
+render-svc/.env
+render-svc/app/.apollo_cache.json
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/*.egg-info/
+
+# Node
+web/node_modules/
+web/.next/
+web/.env.local
+
+# Local dev render output (regenerable, not built into the image)
+render-svc/app/static/output/
+
+# Project docs that don't belong in the image
+README.md

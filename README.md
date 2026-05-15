@@ -21,7 +21,41 @@ Mirrors `Automated_Email_Signatures` policy: for each request we
      from a domain alone.
 
 Set `APOLLO_API_KEY` in `render-svc/.env` — copy from
-`Automated_Email_Signatures/.env`.
+`Automated_Email_Signatures/.env`. `.env` is gitignored so the secret never
+lands in the repo.
+
+## Deploying (Cloud Run)
+
+The render service ships as a Docker image and runs on Cloud Run, mirroring
+the booth scanner's deployment model.
+
+```bash
+# 1. Build + push the image
+gcloud builds submit --config cloudbuild.yaml .
+
+# 2. Deploy to Cloud Run with the Apollo key as an env var
+gcloud run deploy render-svc \
+  --image gcr.io/$PROJECT_ID/render-svc:latest \
+  --region us-central1 \
+  --allow-unauthenticated \
+  --memory 2Gi \
+  --cpu 2 \
+  --timeout 300 \
+  --set-env-vars "APOLLO_API_KEY=$(gcloud secrets versions access latest --secret=apollo-api-key)" \
+  --set-env-vars "PUBLIC_BASE_URL=https://render-svc-<hash>-uc.a.run.app"
+```
+
+**Apollo key in production.** Store the key in Secret Manager
+(`apollo-api-key`) and bind it at deploy time as shown above — never in
+the Dockerfile, never in the repo. The service starts up either way: on a
+missing key it logs a `WARNING` and falls back to homepage scraping (the
+quality gate will reject more renders, but the service still functions for
+companies whose homepage has a discoverable logo).
+
+For local dev, `python-dotenv` reads `render-svc/.env`. For CI tests, set
+`APOLLO_API_KEY` as a repo secret and inject as a job-level env var; the
+on-disk Apollo cache (`render-svc/app/.apollo_cache.json`, gitignored)
+keeps repeat lookups free during a test run.
 
 ## Layout
 ```

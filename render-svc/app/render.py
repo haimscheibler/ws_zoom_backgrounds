@@ -75,26 +75,28 @@ def _make_slug(full_name: str, domain: str) -> str:
     return f"{base[:50]}_{int(time.time())}"
 
 
-def _inline_logo(logo_url: str) -> str:
-    """Fetch the logo bytes and return a `data:` URL so the template doesn't
-    depend on a network round-trip during render. Chromium's `networkidle` is
-    inconsistent at picking up remote `<img>` fetches from a `file://` page;
-    inlining sidesteps the problem entirely and also future-proofs against
-    logo CDNs that 403 on a headless browser UA.
+def _inline_image(url: str, *, label: str = "image") -> str:
+    """Fetch image bytes and return a `data:` URL so the template doesn't
+    depend on a network round-trip during render. Chromium's `networkidle`
+    is inconsistent at picking up remote `<img>` fetches from a `file://`
+    page; inlining sidesteps the problem and also future-proofs against
+    CDNs that 403 on a headless browser UA (LinkedIn's photo URLs in
+    particular).
 
-    Returns the original URL on fetch failure (better to render with a
-    broken-image placeholder than to fail the whole pipeline)."""
-    if not logo_url:
+    Returns "" on fetch failure rather than the raw URL — for the watermark
+    we'd rather omit a layer than have a half-loaded broken image flash
+    through the recording window. The caller decides how to fall back."""
+    if not url:
         return ""
-    resp = _fetch(logo_url, quiet=True)
+    resp = _fetch(url, quiet=True)
     if resp is None or not resp.content:
-        log.warning("logo fetch failed for inlining; falling back to remote URL")
-        return logo_url
+        log.warning("%s fetch failed for inlining: %s", label, url[:80])
+        return ""
 
     ctype = (resp.headers.get("content-type") or "").split(";")[0].strip().lower()
     if not ctype.startswith("image/"):
         # Some CDNs mislabel; guess from extension as a last resort.
-        guessed, _ = mimetypes.guess_type(logo_url)
+        guessed, _ = mimetypes.guess_type(url)
         ctype = guessed if (guessed or "").startswith("image/") else "image/png"
 
     b64 = base64.b64encode(resp.content).decode("ascii")
@@ -106,13 +108,40 @@ def _render_html(
     title: str,
     brand: BrandAssets,
     plate_css: str,
+    photo_url: str,
 ) -> str:
+    """Render the background template.
+
+    `photo_url` and `brand.logo_url` independently drive the corner
+    watermark. The template uses a `brand_mark_mode` flag to pick the
+    correct animation:
+      both       — slow photo↔logo crossfade (10s loop)
+      photo      — photo with a subtle scale pulse
+      logo       — logo with a subtle scale pulse (legacy behaviour)
+      none       — corner watermark omitted entirely
+    The mode is computed here rather than in the template so the gate
+    logic in main.py and the visual logic stay in sync."""
+    inlined_logo = _inline_image(brand.logo_url, label="logo")
+    inlined_photo = _inline_image(photo_url, label="photo")
+
+    if inlined_photo and inlined_logo:
+        mode = "both"
+    elif inlined_photo:
+        mode = "photo"
+    elif inlined_logo:
+        mode = "logo"
+    else:
+        mode = "none"
+    log.info("    brand mark mode: %s", mode)
+
     tpl = _jinja.get_template("background.html.j2")
     return tpl.render(
         full_name=full_name,
         title=title,
         company_name=brand.company_name or brand.domain,
-        logo_url=_inline_logo(brand.logo_url),
+        logo_url=inlined_logo,
+        photo_url=inlined_photo,
+        brand_mark_mode=mode,
         brand_color=brand.brand_color,
         plate_css=plate_css,
     )
@@ -220,6 +249,7 @@ def render_background(
     title: str,
     brand: BrandAssets,
     plate_css: str,
+    photo_url: str = "",
     output_dir: Optional[Path] = None,
     loop_seconds: int = DEFAULT_LOOP_SECONDS,
     fps: int = DEFAULT_FPS,
@@ -232,7 +262,7 @@ def render_background(
     mp4_path = out_dir / f"{slug}.mp4"
     poster_path = out_dir / f"{slug}.png"
 
-    html = _render_html(full_name, title, brand, plate_css)
+    html = _render_html(full_name, title, brand, plate_css, photo_url)
 
     with tempfile.TemporaryDirectory(prefix="zoombg_") as tmp:
         tmp_path = Path(tmp)

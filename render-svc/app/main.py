@@ -40,6 +40,18 @@ logging.basicConfig(
 )
 log = logging.getLogger("render-svc")
 
+# Operator-facing startup banner: surfaces whether the Apollo path is wired
+# so a deployment misconfiguration is visible in Cloud Run logs immediately,
+# not 30 minutes later when someone reports gate-rejection rates spiking.
+if os.environ.get("APOLLO_API_KEY", "").strip():
+    log.info("Apollo enrichment ENABLED (APOLLO_API_KEY set)")
+else:
+    log.warning(
+        "Apollo enrichment DISABLED (APOLLO_API_KEY missing). Brand data "
+        "will rely on homepage scraping only — the quality gate (logo OR "
+        "photo) will reject more requests than in the Apollo-enabled path."
+    )
+
 app = FastAPI(title="WiseStamp Zoom Backgrounds — Render Service")
 
 # Local dev: Next.js on :3000 calls FastAPI on :8080. In production the two
@@ -197,7 +209,8 @@ async def generate(req: BackgroundRequest) -> BackgroundResponse:
     result = await loop.run_in_executor(
         None,
         render_background,
-        req.full_name, effective_title, brand, plate.css, None, loop_seconds, fps,
+        req.full_name, effective_title, brand, plate.css, photo_url,
+        None, loop_seconds, fps,
     )
 
     return BackgroundResponse(

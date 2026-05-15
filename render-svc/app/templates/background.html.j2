@@ -25,12 +25,15 @@
       {{ plate_css|safe }}
     }
 
-    /* WATERMARK OVERLAY — brand logo (top-right) + nametag (bottom-left).
-       This is where all motion lives. Both elements have small, slow
-       animations on a shared 10-second loop with matched first/last
-       frames for seamless Zoom looping. */
+    /* WATERMARK OVERLAY — brand mark (top-right) + nametag (bottom-left).
+       This is where all motion lives. Both elements share a 10-second loop
+       with matched first/last frames for seamless Zoom looping. */
 
-    .logo-mark {
+    /* The brand-mark container: round white plate with a brand-colour ring.
+       Holds either one image (photo or logo, with a subtle pulse) or both
+       (with a slow crossfade). Mode is selected by a class on the container,
+       set server-side from brand_mark_mode. */
+    .brand-mark {
       position: absolute;
       top: 56px;
       right: 56px;
@@ -38,26 +41,61 @@
       height: 140px;
       border-radius: 50%;
       background: #fff;
-      /* Two-layer shadow: a tight ring of brand color, then a soft drop —
-         the ring keeps the white logo plate legible against light plates
-         (where a pure drop-shadow alone would fade), and the drop adds
-         depth on dark plates. */
       box-shadow:
         0 0 0 2px {{ brand_color }}55,
         0 10px 30px rgba(0, 0, 0, 0.28);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      animation: logoPulse 10s ease-in-out infinite;
+      overflow: hidden;
+      animation: markPulse 10s ease-in-out infinite;
     }
-    .logo-mark img {
-      max-width: 100px;
-      max-height: 100px;
-      object-fit: contain;
-    }
-    @keyframes logoPulse {
+    @keyframes markPulse {
       0%, 100% { transform: scale(0.97); }
       50%      { transform: scale(1.00); }
+    }
+
+    .brand-mark .layer {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    /* Photo fills the circle (likely a headshot — cover, not contain).
+       Logo gets padding so it doesn't kiss the brand-colour ring; contain
+       so wide wordmarks aren't cropped. */
+    .brand-mark .layer.photo {
+      object-fit: cover;
+    }
+    .brand-mark .layer.logo {
+      object-fit: contain;
+      padding: 18%;
+      box-sizing: border-box;
+    }
+
+    /* Crossfade — only when both layers are present. Timings mirror the
+       email-signature animator: ~40% hold each side, ~10% transitions.
+       Cubic ease-in-out (CSS default for ease-in-out) matches animator.py's
+       _ease_in_out(). Frame 0 and frame 100% both land on full photo, so
+       the loop is seamless when ffmpeg trims to a single period. */
+    .brand-mark.mode-both .layer.photo {
+      animation: fadePhoto 10s ease-in-out infinite;
+    }
+    .brand-mark.mode-both .layer.logo {
+      animation: fadeLogo 10s ease-in-out infinite;
+    }
+    @keyframes fadePhoto {
+      0%, 35%, 100% { opacity: 1; }
+      50%, 85%      { opacity: 0; }
+    }
+    @keyframes fadeLogo {
+      0%, 35%, 100% { opacity: 0; }
+      50%, 85%      { opacity: 1; }
+    }
+    /* Single-layer modes: hide the other layer entirely. (`mode-photo` /
+       `mode-logo` paths — only one layer ever rendered, but defensive in
+       case both fields are accidentally populated.) */
+    .brand-mark.mode-photo .layer.logo,
+    .brand-mark.mode-logo .layer.photo {
+      display: none;
     }
 
     .nametag {
@@ -128,9 +166,14 @@
 <body>
   <div class="plate"></div>
 
-  {% if logo_url %}
-  <div class="logo-mark">
-    <img src="{{ logo_url }}" alt="{{ company_name }}">
+  {% if brand_mark_mode != "none" %}
+  <div class="brand-mark mode-{{ brand_mark_mode }}">
+    {% if photo_url %}
+    <img class="layer photo" src="{{ photo_url }}" alt="{{ full_name }}">
+    {% endif %}
+    {% if logo_url %}
+    <img class="layer logo" src="{{ logo_url }}" alt="{{ company_name }}">
+    {% endif %}
   </div>
   {% endif %}
 
