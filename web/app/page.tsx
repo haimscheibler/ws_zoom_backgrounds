@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 const RENDER_SVC = process.env.NEXT_PUBLIC_RENDER_SVC ?? "http://localhost:8080";
 
@@ -12,6 +12,17 @@ type GenerateResponse = {
   domain: string;
   logo_url: string;
   brand_color: string;
+  photo_url: string;
+  photo_source: string;
+  enrichment_source: string;
+  plate_key: string;
+};
+
+type Plate = {
+  key: string;
+  label: string;
+  css: string;
+  text_on_light: boolean;
 };
 
 /** The mp4/poster URLs returned by the backend are relative paths in local
@@ -23,13 +34,52 @@ function absolutise(url: string): string {
   return `${RENDER_SVC}${url}`;
 }
 
+/** Convert a plain CSS declaration string ("background: #fff; color: red;")
+ * into a React inline-style object. The server emits CSS rather than a
+ * pre-parsed object so the same string drives both the actual render and
+ * the picker thumbnails — single source of truth. */
+function parseInlineCss(css: string): React.CSSProperties {
+  const out: Record<string, string> = {};
+  for (const decl of css.split(";")) {
+    const idx = decl.indexOf(":");
+    if (idx < 0) continue;
+    const prop = decl.slice(0, idx).trim();
+    const value = decl.slice(idx + 1).trim();
+    if (!prop || !value) continue;
+    // kebab-case → camelCase for React style keys.
+    const camel = prop.replace(/-([a-z])/g, (_, c) => c.toUpperCase());
+    out[camel] = value;
+  }
+  return out as React.CSSProperties;
+}
+
 export default function Home() {
   const [fullName, setFullName] = useState("");
   const [title, setTitle] = useState("");
   const [companyUrl, setCompanyUrl] = useState("");
+  const [plates, setPlates] = useState<Plate[]>([]);
+  const [selectedPlate, setSelectedPlate] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<GenerateResponse | null>(null);
+
+  useEffect(() => {
+    // Fetch plate presets once on mount. Failures are silent — the picker
+    // just stays empty and the server still falls back to its default plate
+    // when we submit with an empty `plate` value.
+    let cancelled = false;
+    fetch(`${RENDER_SVC}/plates`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((list: Plate[]) => {
+        if (cancelled) return;
+        setPlates(list);
+        // Default to the second plate (Soft Studio) rather than the first
+        // (pure white), which most users will want to override anyway.
+        if (list.length > 0) setSelectedPlate(list[1]?.key ?? list[0].key);
+      })
+      .catch(() => { /* leave plates empty; server uses its default */ });
+    return () => { cancelled = true; };
+  }, []);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -44,6 +94,7 @@ export default function Home() {
           full_name: fullName.trim(),
           title: title.trim(),
           company_url: companyUrl.trim(),
+          plate: selectedPlate,
         }),
       });
       if (!r.ok) {
@@ -117,6 +168,48 @@ export default function Home() {
             We scrape the homepage for the company logo and dominant brand color.
           </span>
         </label>
+
+        {plates.length > 0 && (
+          <fieldset className="grid gap-2">
+            <legend className="text-sm font-medium text-white/80">Background plate</legend>
+            <p className="text-xs text-white/40">
+              Static surface. Your logo + nametag overlay on top as an animated watermark.
+            </p>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-5">
+              {plates.map((p) => {
+                const selected = p.key === selectedPlate;
+                return (
+                  <button
+                    type="button"
+                    key={p.key}
+                    onClick={() => setSelectedPlate(p.key)}
+                    aria-pressed={selected}
+                    className={`group flex flex-col gap-1.5 rounded-lg border p-1.5 transition ${
+                      selected
+                        ? "border-[#055bfb] bg-[#055bfb]/10"
+                        : "border-white/15 hover:border-white/30"
+                    }`}
+                  >
+                    {/* Thumbnail: same CSS string the server uses for the
+                        actual render, applied to a 16:9 div. Aspect ratio
+                        matches the 1920×1080 output. */}
+                    <div
+                      style={{ ...parseInlineCss(p.css) }}
+                      className="aspect-video w-full rounded ring-1 ring-black/20"
+                    />
+                    <span
+                      className={`text-xs ${
+                        selected ? "text-white" : "text-white/70"
+                      }`}
+                    >
+                      {p.label}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </fieldset>
+        )}
 
         <button
           type="submit"

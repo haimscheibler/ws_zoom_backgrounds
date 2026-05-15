@@ -10,10 +10,26 @@ class BackgroundRequest(BaseModel):
     `company_url` accepts anything we can extract a domain from — a bare domain
     (acme.com), full URL (https://acme.com/about), or LinkedIn company URL is
     fine. We normalise downstream.
+
+    `plate` picks the static background surface (see plates.py PRESETS). The
+    brand watermark (logo + nametag) overlays on top. Unknown values fall
+    back to the default plate rather than 400ing — keeps the API forgiving
+    as we rename/retire plates over time.
     """
     full_name: str = Field(min_length=1, max_length=80)
     title: str = Field(default="", max_length=120)
     company_url: str = Field(min_length=3, max_length=200)
+    plate: str = Field(default="", max_length=40)
+
+
+class PlateOption(BaseModel):
+    """One entry in the GET /plates picker response. `css` is the same
+    string the server uses when rendering — the front-end can paint
+    accurate thumbnails by applying it to a div."""
+    key: str
+    label: str
+    css: str
+    text_on_light: bool
 
 
 class BackgroundResponse(BaseModel):
@@ -33,3 +49,4 @@ class BackgroundResponse(BaseModel):
     linkedin_url: str = ""
     socials: dict[str, str] = {}    # {linkedin: url, twitter: url, ...}
     enrichment_source: str = ""     # apollo+scrape | apollo-only | scrape-only | none
+    plate_key: str = ""             # which plate was applied (after fallback)

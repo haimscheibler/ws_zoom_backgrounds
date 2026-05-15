@@ -105,6 +105,7 @@ def _render_html(
     full_name: str,
     title: str,
     brand: BrandAssets,
+    plate_css: str,
 ) -> str:
     tpl = _jinja.get_template("background.html.j2")
     return tpl.render(
@@ -113,6 +114,7 @@ def _render_html(
         company_name=brand.company_name or brand.domain,
         logo_url=_inline_logo(brand.logo_url),
         brand_color=brand.brand_color,
+        plate_css=plate_css,
     )
 
 
@@ -217,6 +219,7 @@ def render_background(
     full_name: str,
     title: str,
     brand: BrandAssets,
+    plate_css: str,
     output_dir: Optional[Path] = None,
     loop_seconds: int = DEFAULT_LOOP_SECONDS,
     fps: int = DEFAULT_FPS,
@@ -229,7 +232,7 @@ def render_background(
     mp4_path = out_dir / f"{slug}.mp4"
     poster_path = out_dir / f"{slug}.png"
 
-    html = _render_html(full_name, title, brand)
+    html = _render_html(full_name, title, brand, plate_css)
 
     with tempfile.TemporaryDirectory(prefix="zoombg_") as tmp:
         tmp_path = Path(tmp)

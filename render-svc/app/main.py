@@ -26,9 +26,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from . import photo as photo_mod
+from . import plates as plates_mod
 from .apollo import enrich as apollo_enrich
 from .brand_scraper import BrandAssets, brand_from_apollo, scrape_brand
-from .models import BackgroundRequest, BackgroundResponse
+from .models import BackgroundRequest, BackgroundResponse, PlateOption
 from .render import OUTPUT_DIR_DEFAULT, render_background
 
 load_dotenv()
@@ -94,6 +95,17 @@ def _split_name(full_name: str) -> tuple[str, str]:
 @app.get("/healthz")
 def healthz() -> dict:
     return {"status": "ok"}
+
+
+@app.get("/plates", response_model=list[PlateOption])
+def list_plates() -> list[PlateOption]:
+    """Front-end picker source. Returns CSS strings the picker re-applies to
+    DOM nodes to paint accurate thumbnails — keeps the server out of
+    thumbnail-generation duty."""
+    return [
+        PlateOption(key=p.key, label=p.label, css=p.css, text_on_light=p.text_on_light)
+        for p in plates_mod.PRESETS
+    ]
 
 
 @app.post("/generate", response_model=BackgroundResponse)
@@ -173,6 +185,11 @@ async def generate(req: BackgroundRequest) -> BackgroundResponse:
         else "scrape"
     )
 
+    # Plate: caller's choice, unknown keys silently fall back to the default
+    # (plates.get returns the default rather than raising).
+    plate = plates_mod.get(req.plate)
+    log.info("    plate: %s", plate.key)
+
     loop_seconds = int(os.environ.get("LOOP_SECONDS", "10"))
     fps = int(os.environ.get("VIDEO_FPS", "30"))
 
@@ -180,7 +197,7 @@ async def generate(req: BackgroundRequest) -> BackgroundResponse:
     result = await loop.run_in_executor(
         None,
         render_background,
-        req.full_name, effective_title, brand, None, loop_seconds, fps,
+        req.full_name, effective_title, brand, plate.css, None, loop_seconds, fps,
     )
 
     return BackgroundResponse(
@@ -196,4 +213,5 @@ async def generate(req: BackgroundRequest) -> BackgroundResponse:
         linkedin_url=apollo.linkedin_url,
         socials=socials,
         enrichment_source=enrichment_source,
+        plate_key=plate.key,
     )

@@ -4,72 +4,32 @@
   <meta charset="utf-8">
   <title>{{ full_name }} — {{ company_name }}</title>
   <style>
-    /* Reset to a fixed 1920x1080 canvas. The Playwright viewport matches this
-       so the headless browser records exactly what's on screen, no scaling. */
+    /* Fixed 1920×1080 canvas matching the Playwright viewport — no scaling. */
     html, body {
       margin: 0;
       padding: 0;
       width: 1920px;
       height: 1080px;
       overflow: hidden;
-      background: #0a1626;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      color: #fff;
       -webkit-font-smoothing: antialiased;
     }
 
-    /* Layered background. Bottom: deep brand-tinted base. Mid: two large
-       radial gradients that drift in opposite directions on a 10s loop —
-       gives the "ambient breathing" effect Zoom's matting tolerates. */
-    .stage {
-      position: relative;
-      width: 1920px;
-      height: 1080px;
-      background:
-        radial-gradient(ellipse 1800px 1200px at 50% 50%,
-          {{ brand_color }}33 0%,
-          {{ brand_color }}11 35%,
-          #0a1626 70%);
-    }
-
-    .blob {
+    /* PLATE LAYER — static background scene chosen by the user. The
+       background string is injected verbatim from plates.py. Confining the
+       full-frame surface to zero motion keeps Zoom's matting algorithm
+       happy: only the corner watermark animates. */
+    .plate {
       position: absolute;
-      width: 1400px;
-      height: 1400px;
-      border-radius: 50%;
-      filter: blur(120px);
-      opacity: 0.55;
-      mix-blend-mode: screen;
-      will-change: transform, opacity;
-    }
-    .blob-a {
-      left: -300px;
-      top: -300px;
-      background: {{ brand_color }};
-      animation: driftA 10s ease-in-out infinite;
-    }
-    .blob-b {
-      right: -300px;
-      bottom: -300px;
-      background: {{ brand_color }};
-      animation: driftB 10s ease-in-out infinite;
-    }
-    /* Symmetric drift — both blobs are at their starting position at t=0
-       AND t=10s, so the loop is seamless (Zoom requires matched first/last
-       frames for clean looping). */
-    @keyframes driftA {
-      0%, 100% { transform: translate(0, 0)         scale(1.00); opacity: 0.50; }
-      50%      { transform: translate(220px, 140px) scale(1.08); opacity: 0.65; }
-    }
-    @keyframes driftB {
-      0%, 100% { transform: translate(0, 0)           scale(1.00); opacity: 0.45; }
-      50%      { transform: translate(-220px, -140px) scale(1.10); opacity: 0.60; }
+      inset: 0;
+      {{ plate_css|safe }}
     }
 
-    /* Top-right: company logo with gentle pulse. White circular plate behind
-       so logos with transparency stay visible against the brand-tinted
-       background. Slow scale pulse (0.96 → 1.00) is below Zoom's "fast
-       motion" threshold. */
+    /* WATERMARK OVERLAY — brand logo (top-right) + nametag (bottom-left).
+       This is where all motion lives. Both elements have small, slow
+       animations on a shared 10-second loop with matched first/last
+       frames for seamless Zoom looping. */
+
     .logo-mark {
       position: absolute;
       top: 56px;
@@ -78,36 +38,51 @@
       height: 140px;
       border-radius: 50%;
       background: #fff;
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+      /* Two-layer shadow: a tight ring of brand color, then a soft drop —
+         the ring keeps the white logo plate legible against light plates
+         (where a pure drop-shadow alone would fade), and the drop adds
+         depth on dark plates. */
+      box-shadow:
+        0 0 0 2px {{ brand_color }}55,
+        0 10px 30px rgba(0, 0, 0, 0.28);
       display: flex;
       align-items: center;
       justify-content: center;
-      animation: pulse 10s ease-in-out infinite;
-    }
-    @keyframes pulse {
-      0%, 100% { transform: scale(0.96); }
-      50%      { transform: scale(1.00); }
+      animation: logoPulse 10s ease-in-out infinite;
     }
     .logo-mark img {
       max-width: 100px;
       max-height: 100px;
       object-fit: contain;
     }
+    @keyframes logoPulse {
+      0%, 100% { transform: scale(0.97); }
+      50%      { transform: scale(1.00); }
+    }
 
-    /* Lower-left nametag. Persistent, no animation — the user wants to be
-       readable for the full meeting. Brand color used as the accent bar on
-       the left so the eye picks up the company identity. */
     .nametag {
       position: absolute;
       left: 80px;
       bottom: 88px;
       max-width: 720px;
       padding: 24px 36px 24px 32px;
-      background: rgba(10, 22, 38, 0.72);
-      backdrop-filter: blur(12px);
+      /* Translucent dark with backdrop blur — readable against both light
+         plates (where the dark wash provides contrast) and dark plates
+         (where the blur picks up the plate's tone). */
+      background: rgba(10, 22, 38, 0.78);
+      backdrop-filter: blur(14px);
       border-left: 6px solid {{ brand_color }};
       border-radius: 12px;
-      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+      color: #fff;
+      /* Subtle brightness pulse on the whole tag — reads as a gentle "alive"
+         glow rather than a movement, which is exactly what we want around
+         someone's silhouette. */
+      animation: nametagBreathe 10s ease-in-out infinite;
+    }
+    @keyframes nametagBreathe {
+      0%, 100% { filter: brightness(0.96); }
+      50%      { filter: brightness(1.04); }
     }
     .nametag .name {
       font-size: 44px;
@@ -125,14 +100,13 @@
     .nametag .company {
       font-size: 18px;
       font-weight: 600;
-      color: #fff;
       letter-spacing: 0.5px;
       text-transform: uppercase;
       margin: 14px 0 0;
       padding-top: 12px;
       border-top: 1px solid rgba(255, 255, 255, 0.18);
     }
-    .nametag .company .accent {
+    .nametag .accent {
       display: inline-block;
       width: 8px;
       height: 8px;
@@ -140,25 +114,30 @@
       background: {{ brand_color }};
       margin-right: 10px;
       vertical-align: middle;
+      /* Phase-offset opacity pulse — feels like a status dot rather than the
+         tag itself moving. Slight glow via box-shadow that scales with
+         opacity gives it depth without dimensions changing. */
+      animation: accentPulse 10s ease-in-out infinite;
+    }
+    @keyframes accentPulse {
+      0%, 100% { opacity: 0.55; box-shadow: 0 0 0 0 {{ brand_color }}00; }
+      50%      { opacity: 1.00; box-shadow: 0 0 12px 2px {{ brand_color }}66; }
     }
   </style>
 </head>
 <body>
-  <div class="stage">
-    <div class="blob blob-a"></div>
-    <div class="blob blob-b"></div>
+  <div class="plate"></div>
 
-    {% if logo_url %}
-    <div class="logo-mark">
-      <img src="{{ logo_url }}" alt="{{ company_name }}">
-    </div>
-    {% endif %}
+  {% if logo_url %}
+  <div class="logo-mark">
+    <img src="{{ logo_url }}" alt="{{ company_name }}">
+  </div>
+  {% endif %}
 
-    <div class="nametag">
-      <p class="name">{{ full_name }}</p>
-      {% if title %}<p class="title">{{ title }}</p>{% endif %}
-      <p class="company"><span class="accent"></span>{{ company_name }}</p>
-    </div>
+  <div class="nametag">
+    <p class="name">{{ full_name }}</p>
+    {% if title %}<p class="title">{{ title }}</p>{% endif %}
+    <p class="company"><span class="accent"></span>{{ company_name }}</p>
   </div>
 </body>
 </html>
