@@ -96,3 +96,18 @@ npm run dev      # http://localhost:3000
 - MP4 / H.264, 1920×1080, 10-second seamless loop, ~3-5 MB
 - Subtle ambient motion only — Zoom's matting algorithm breaks on high-contrast
   fast motion (edge artifacts around hair/shoulders)
+
+## Layout safe zones (Zoom / Meet / Teams)
+
+No single layout is safe in 100% of viewer configurations. We pick defaults
+that work for the most common case (active-speaker view in Zoom desktop)
+and accept that aggressive Meet portrait-tile crops or Teams together-mode
+compositing may clip corner elements.
+
+Element positions are inset from the edges to maximise safe coverage:
+
+| Element | Position | Reasoning |
+|---|---|---|
+| Brand mark (corner watermark) | top-right, 110px inset | Clears Zoom's active-speaker thumbnail strip and Meet's portrait crop |
+| Nametag | bottom-left, 130px / 140px inset | Floats above Zoom's own bottom-left name pill, and Zoom's auto-hide controls bar |
+| Banner (when enabled) | bottom-edge, 160px side margins | Avoids corner crops; clears Zoom's hover controls bar zone |

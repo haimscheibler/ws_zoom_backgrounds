@@ -32,11 +32,14 @@
     /* The brand-mark container: round white plate with a brand-colour ring.
        Holds either one image (photo or logo, with a subtle pulse) or both
        (with a slow crossfade). Mode is selected by a class on the container,
-       set server-side from brand_mark_mode. */
+       set server-side from brand_mark_mode.
+       Position: inset ~110px from corners so Google Meet's dynamic-tiles
+       portrait crop doesn't slice the watermark in half, and Zoom's active-
+       speaker thumbnail strip in the top corners doesn't cover it. */
     .brand-mark {
       position: absolute;
-      top: 56px;
-      right: 56px;
+      top: 110px;
+      right: 110px;
       width: 140px;
       height: 140px;
       border-radius: 50%;
@@ -100,8 +103,14 @@
 
     .nametag {
       position: absolute;
-      left: 80px;
-      bottom: 88px;
+      /* Insets match the brand mark — same safe-zone rationale. The extra
+         vertical margin (140px from bottom) also clears Zoom's auto-hide
+         controls bar zone, which sits flush at the bottom when the speaker
+         is hovering. Zoom's own name pill ("Patrick Collison" 🎤) sits at
+         the very bottom-left of the tile; our nametag floats above it so
+         the two don't collide. */
+      left: 130px;
+      bottom: 140px;
       max-width: 720px;
       padding: 24px 36px 24px 32px;
       /* Translucent dark with backdrop blur — readable against both light

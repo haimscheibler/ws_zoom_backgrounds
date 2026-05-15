@@ -9,6 +9,9 @@ __pycache__/
 .apollo_cache.json
 render-svc/app/.apollo_cache.json
 
+# Body-bg lookup cache (per-deployment, regenerable)
+render-svc/app/.body_bg_cache.json
+
 # Node
 node_modules/
 .next/

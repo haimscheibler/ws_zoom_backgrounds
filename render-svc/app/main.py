@@ -28,6 +28,7 @@ from fastapi.staticfiles import StaticFiles
 from . import photo as photo_mod
 from . import plates as plates_mod
 from .apollo import enrich as apollo_enrich
+from .body_bg import extract_body_bg
 from .brand_scraper import BrandAssets, brand_from_apollo, scrape_brand
 from .models import BackgroundRequest, BackgroundResponse, PlateOption
 from .render import OUTPUT_DIR_DEFAULT, render_background
@@ -197,10 +198,27 @@ async def generate(req: BackgroundRequest) -> BackgroundResponse:
         else "scrape"
     )
 
-    # Plate: caller's choice, unknown keys silently fall back to the default
-    # (plates.get returns the default rather than raising).
+    # Plate: caller's choice, unknown keys silently fall back to the default.
     plate = plates_mod.get(req.plate)
-    log.info("    plate: %s", plate.key)
+    plate_css = plate.css
+
+    # Special-case the auto plate: resolve its CSS from the company's
+    # homepage body bg at request time. If extraction yields nothing usable
+    # (transparent, near-white, or homepage unreachable), fall back to the
+    # default plate's CSS so we still produce a render — the response's
+    # plate_key will reflect the actual rendered plate.
+    if plate.key == plates_mod.AUTO_PLATE_KEY:
+        resolved_hex = await loop.run_in_executor(None, extract_body_bg, domain)
+        if resolved_hex:
+            plate_css = f"background: {resolved_hex};"
+            log.info("    plate: auto → %s", resolved_hex)
+        else:
+            fallback = plates_mod.get("")  # default plate
+            plate = fallback
+            plate_css = fallback.css
+            log.info("    plate: auto unusable, fallback → %s", fallback.key)
+    else:
+        log.info("    plate: %s", plate.key)
 
     loop_seconds = int(os.environ.get("LOOP_SECONDS", "10"))
     fps = int(os.environ.get("VIDEO_FPS", "30"))
@@ -209,7 +227,7 @@ async def generate(req: BackgroundRequest) -> BackgroundResponse:
     result = await loop.run_in_executor(
         None,
         render_background,
-        req.full_name, effective_title, brand, plate.css, photo_url,
+        req.full_name, effective_title, brand, plate_css, photo_url,
         None, loop_seconds, fps,
     )
 

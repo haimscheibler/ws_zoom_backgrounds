@@ -27,6 +27,9 @@ class Plate:
     # this flag is exposed in case a future template variant needs to flip.
 
 
+AUTO_PLATE_KEY = "auto"
+
+
 PRESETS: tuple[Plate, ...] = (
     Plate(
         key="white",
@@ -72,6 +75,20 @@ PRESETS: tuple[Plate, ...] = (
         css=(
             "background: radial-gradient(ellipse 1800px 1200px at 50% 30%, "
             "#1b2d4f 0%, #0f1b35 50%, #060a1d 100%);"
+        ),
+        text_on_light=False,
+    ),
+    # The auto plate is a special case: its CSS is resolved server-side by
+    # body_bg.py at /generate time, using the company's homepage's computed
+    # body { background-color }. The thumbnail in the picker is a striped
+    # placeholder — we don't know the actual color until the user picks
+    # and submits. Placed last so it doesn't shift the default selection.
+    Plate(
+        key=AUTO_PLATE_KEY,
+        label="Match Website",
+        css=(
+            "background: repeating-linear-gradient("
+            "135deg, #2a3550 0 14px, #324063 14px 28px);"
         ),
         text_on_light=False,
     ),
