@@ -108,7 +108,9 @@
          controls bar zone, which sits flush at the bottom when the speaker
          is hovering. Zoom's own name pill ("Patrick Collison" 🎤) sits at
          the very bottom-left of the tile; our nametag floats above it so
-         the two don't collide. */
+         the two don't collide.
+         When the bottom-edge banner is enabled, the nametag relocates to
+         top-left (see .nametag.top-left) to avoid overlapping the banner. */
       left: 130px;
       bottom: 140px;
       max-width: 720px;
@@ -170,6 +172,154 @@
       0%, 100% { opacity: 0.55; box-shadow: 0 0 0 0 {{ brand_color }}00; }
       50%      { opacity: 1.00; box-shadow: 0 0 12px 2px {{ brand_color }}66; }
     }
+
+    /* Nametag relocated to top-left when the banner occupies the bottom.
+       Same insets as the brand mark for visual balance. */
+    .nametag.top-left {
+      top: 110px;
+      left: 130px;
+      bottom: auto;
+    }
+
+    /* Standalone QR card — small "scan to connect" widget that mirrors the
+       nametag vertically (same bottom inset) but on the right side. Hidden
+       when a banner is enabled because the banner carries its own CTA QR. */
+    .qr-card {
+      position: absolute;
+      right: 130px;
+      bottom: 140px;
+      width: 220px;
+      padding: 14px 14px 12px;
+      background: #fff;
+      border-radius: 12px;
+      border-left: 6px solid {{ brand_color }};
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.32);
+      color: #0a1626;
+      animation: qrBreathe 10s ease-in-out infinite;
+    }
+    @keyframes qrBreathe {
+      0%, 100% { filter: brightness(0.97); }
+      50%      { filter: brightness(1.03); }
+    }
+    .qr-card img {
+      display: block;
+      width: 192px;
+      height: 192px;
+      margin: 0 auto;
+      /* Hint to the browser to draw QR pixels crisp, not smoothed (a
+         smoothed QR phones can fail to scan). */
+      image-rendering: pixelated;
+    }
+    .qr-card .qr-caption {
+      margin: 8px 0 0;
+      text-align: center;
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.4px;
+      text-transform: uppercase;
+      color: {{ brand_color }};
+    }
+
+    /* BOTTOM-EDGE BANNER — ports the email-signature `banner.py` design
+       (eyebrow + title + date/location + CTA pill, brand-color block) to
+       a 1600×280 strip at the bottom of the video. 160px side margins
+       leave the corners free of the banner so dynamic-tile crops in Meet
+       don't slice the CTA in half. Static — no animation. */
+    .banner {
+      position: absolute;
+      left: 160px;
+      right: 160px;
+      bottom: 50px;
+      height: 280px;
+      background: {{ brand_color }};
+      border-radius: 16px;
+      box-shadow: 0 20px 48px rgba(0, 0, 0, 0.4);
+      display: grid;
+      /* Roughly 60/40 split: title block on the left, CTA + dates on the
+         right. The right column flex-aligns so the QR + pill stay clustered
+         no matter the title length. */
+      grid-template-columns: 1fr 480px;
+      align-items: center;
+      padding: 0 48px;
+      color: #fff;
+      overflow: hidden;
+    }
+    .banner .left {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 12px;
+    }
+    .banner .eyebrow {
+      font-size: 24px;
+      font-weight: 700;
+      letter-spacing: 4px;
+      text-transform: uppercase;
+      opacity: 0.85;
+      margin: 0;
+    }
+    .banner .event {
+      font-size: 56px;
+      font-weight: 800;
+      letter-spacing: -1px;
+      line-height: 1.05;
+      margin: 0;
+      /* Long event names should wrap rather than overflow, but cap at
+         2 lines so the banner height stays predictable. */
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .banner .right {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: flex-end;
+      gap: 14px;
+    }
+    .banner .right-row {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+    }
+    .banner .date-place {
+      font-size: 18px;
+      font-weight: 500;
+      opacity: 0.92;
+      text-align: right;
+      line-height: 1.35;
+      margin: 0;
+    }
+    .banner .cta-pill {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      height: 64px;
+      padding: 0 32px;
+      background: #fff;
+      color: {{ brand_color }};
+      font-size: 22px;
+      font-weight: 800;
+      letter-spacing: 1.2px;
+      text-transform: uppercase;
+      border-radius: 999px;
+      box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25);
+    }
+    .banner .banner-qr {
+      width: 132px;
+      height: 132px;
+      padding: 10px;
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+    }
+    .banner .banner-qr img {
+      width: 100%;
+      height: 100%;
+      display: block;
+      image-rendering: pixelated;
+    }
   </style>
 </head>
 <body>
@@ -186,10 +336,41 @@
   </div>
   {% endif %}
 
-  <div class="nametag">
+  <div class="nametag{% if nametag_position == 'top_left' %} top-left{% endif %}">
     <p class="name">{{ full_name }}</p>
     {% if title %}<p class="title">{{ title }}</p>{% endif %}
     <p class="company"><span class="accent"></span>{{ company_name }}</p>
   </div>
+
+  {% if show_standalone_qr and standalone_qr_data_uri %}
+  <div class="qr-card">
+    <img src="{{ standalone_qr_data_uri }}" alt="QR code">
+    <p class="qr-caption">{{ qr_caption }}</p>
+  </div>
+  {% endif %}
+
+  {% if show_banner and banner %}
+  <div class="banner">
+    <div class="left">
+      <p class="eyebrow">{{ banner.eyebrow }}</p>
+      <p class="event">{{ banner.event_name }}</p>
+    </div>
+    <div class="right">
+      {% if banner.event_dates or banner.event_location %}
+      <p class="date-place">
+        {% if banner.event_dates %}{{ banner.event_dates }}{% endif %}
+        {% if banner.event_dates and banner.event_location %}<br>{% endif %}
+        {% if banner.event_location %}{{ banner.event_location }}{% endif %}
+      </p>
+      {% endif %}
+      <div class="right-row">
+        {% if banner_qr_data_uri %}
+        <div class="banner-qr"><img src="{{ banner_qr_data_uri }}" alt="QR code"></div>
+        {% endif %}
+        <span class="cta-pill">{{ banner.cta_text }}</span>
+      </div>
+    </div>
+  </div>
+  {% endif %}
 </body>
 </html>

@@ -1,7 +1,27 @@
 """Pydantic request/response schemas for the render service."""
 from __future__ import annotations
 
+from typing import Optional
+
 from pydantic import BaseModel, Field
+
+
+class BannerConfig(BaseModel):
+    """Event-style promotional banner — ports the email-signature banner.py
+    layout (eyebrow + title + date/location + CTA pill) to the bottom edge
+    of the video frame.
+
+    `cta_url` is the URL embedded as a QR code on the right end of the
+    banner so meeting participants can "click" it from their phone. Without
+    a cta_url the banner still renders but with no QR — useful for pure
+    awareness pushes ("Hiring engineers!") where there's no booking link.
+    """
+    event_name: str = Field(min_length=1, max_length=80)
+    event_dates: str = Field(default="", max_length=60)
+    event_location: str = Field(default="", max_length=60)
+    eyebrow: str = Field(default="MEET ME AT", max_length=40)
+    cta_text: str = Field(default="LET'S MEET", max_length=20)
+    cta_url: str = Field(default="", max_length=400)
 
 
 class BackgroundRequest(BaseModel):
@@ -20,6 +40,17 @@ class BackgroundRequest(BaseModel):
     title: str = Field(default="", max_length=120)
     company_url: str = Field(min_length=3, max_length=200)
     plate: str = Field(default="", max_length=40)
+
+    # Standalone QR code toggle. Renders a small QR card mirroring the
+    # nametag's position. If unset but Apollo gave us a linkedin_url for
+    # this person, we default to that — the most common "connect with me"
+    # use case. Set explicitly to "" with `qr_disabled=true` to hide.
+    qr_url: str = Field(default="", max_length=400)
+    qr_caption: str = Field(default="Scan to connect", max_length=40)
+    qr_disabled: bool = False  # explicit opt-out to override the LinkedIn auto-default
+
+    # Promotional banner along the bottom edge. None = no banner.
+    banner: Optional[BannerConfig] = None
 
 
 class PlateOption(BaseModel):

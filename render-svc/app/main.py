@@ -223,11 +223,25 @@ async def generate(req: BackgroundRequest) -> BackgroundResponse:
     loop_seconds = int(os.environ.get("LOOP_SECONDS", "10"))
     fps = int(os.environ.get("VIDEO_FPS", "30"))
 
+    # Standalone QR: caller's URL wins. When the caller leaves it blank and
+    # hasn't explicitly disabled QR, we default to the person's Apollo
+    # LinkedIn (most common "scan to connect" use case). qr_disabled lets
+    # the caller turn it off entirely without having to send an empty URL.
+    if req.qr_disabled:
+        effective_qr_url = ""
+    elif req.qr_url:
+        effective_qr_url = req.qr_url
+    else:
+        effective_qr_url = apollo.linkedin_url
+    if effective_qr_url:
+        log.info("    qr: %s", effective_qr_url[:80])
+
     # 5. Render (CPU-bound — Playwright + ffmpeg).
     result = await loop.run_in_executor(
         None,
         render_background,
         req.full_name, effective_title, brand, plate_css, photo_url,
+        effective_qr_url, req.qr_caption, req.banner,
         None, loop_seconds, fps,
     )
 

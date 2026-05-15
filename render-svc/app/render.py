@@ -38,6 +38,8 @@ import imageio_ffmpeg
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from .brand_scraper import BrandAssets, _fetch  # _fetch handles UA rotation + SSL fallback
+from .models import BannerConfig
+from .qr import render_qr_data_uri
 
 log = logging.getLogger(__name__)
 
@@ -109,6 +111,9 @@ def _render_html(
     brand: BrandAssets,
     plate_css: str,
     photo_url: str,
+    qr_url: str = "",
+    qr_caption: str = "",
+    banner: Optional[BannerConfig] = None,
 ) -> str:
     """Render the background template.
 
@@ -134,6 +139,25 @@ def _render_html(
         mode = "none"
     log.info("    brand mark mode: %s", mode)
 
+    # QR + banner layout decisions. When the banner is on it takes the
+    # bottom-edge slot — the nametag relocates to top-left so they don't
+    # collide. The standalone QR is suppressed when a banner is shown
+    # because the banner already carries its own (the CTA QR), and stacking
+    # two QR codes in one frame is visual noise.
+    show_banner = banner is not None
+    show_standalone_qr = bool(qr_url) and not show_banner
+    nametag_position = "top_left" if show_banner else "bottom_left"
+
+    standalone_qr_data_uri = render_qr_data_uri(qr_url) if show_standalone_qr else ""
+    banner_qr_data_uri = (
+        render_qr_data_uri(banner.cta_url) if (show_banner and banner.cta_url) else ""
+    )
+    if show_banner:
+        log.info("    banner: %s | cta_qr=%s",
+                 banner.event_name, bool(banner_qr_data_uri))
+    elif show_standalone_qr:
+        log.info("    standalone QR: rendered (%d chars)", len(qr_url))
+
     tpl = _jinja.get_template("background.html.j2")
     return tpl.render(
         full_name=full_name,
@@ -144,6 +168,13 @@ def _render_html(
         brand_mark_mode=mode,
         brand_color=brand.brand_color,
         plate_css=plate_css,
+        nametag_position=nametag_position,
+        show_standalone_qr=show_standalone_qr,
+        standalone_qr_data_uri=standalone_qr_data_uri,
+        qr_caption=qr_caption or "Scan to connect",
+        show_banner=show_banner,
+        banner=banner,
+        banner_qr_data_uri=banner_qr_data_uri,
     )
 
 
@@ -250,6 +281,9 @@ def render_background(
     brand: BrandAssets,
     plate_css: str,
     photo_url: str = "",
+    qr_url: str = "",
+    qr_caption: str = "",
+    banner: Optional[BannerConfig] = None,
     output_dir: Optional[Path] = None,
     loop_seconds: int = DEFAULT_LOOP_SECONDS,
     fps: int = DEFAULT_FPS,
@@ -262,7 +296,10 @@ def render_background(
     mp4_path = out_dir / f"{slug}.mp4"
     poster_path = out_dir / f"{slug}.png"
 
-    html = _render_html(full_name, title, brand, plate_css, photo_url)
+    html = _render_html(
+        full_name, title, brand, plate_css, photo_url,
+        qr_url=qr_url, qr_caption=qr_caption, banner=banner,
+    )
 
     with tempfile.TemporaryDirectory(prefix="zoombg_") as tmp:
         tmp_path = Path(tmp)

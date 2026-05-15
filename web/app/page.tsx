@@ -59,6 +59,23 @@ export default function Home() {
   const [companyUrl, setCompanyUrl] = useState("");
   const [plates, setPlates] = useState<Plate[]>([]);
   const [selectedPlate, setSelectedPlate] = useState<string>("");
+
+  // QR toggle. Default-on, defaults to Apollo's LinkedIn for this person
+  // (handled server-side when qr_url is blank). qrDisabled is the explicit
+  // opt-out so the server doesn't fall back to LinkedIn.
+  const [qrDisabled, setQrDisabled] = useState(false);
+  const [qrUrl, setQrUrl] = useState("");
+  const [qrCaption, setQrCaption] = useState("Scan to connect");
+
+  // Banner toggle. Off by default — banner is a marketing/event push, not
+  // the everyday case. Whole banner block hidden until enabled.
+  const [bannerEnabled, setBannerEnabled] = useState(false);
+  const [bannerEvent, setBannerEvent] = useState("");
+  const [bannerDates, setBannerDates] = useState("");
+  const [bannerLocation, setBannerLocation] = useState("");
+  const [bannerCtaText, setBannerCtaText] = useState("LET'S MEET");
+  const [bannerCtaUrl, setBannerCtaUrl] = useState("");
+
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<GenerateResponse | null>(null);
@@ -87,15 +104,28 @@ export default function Home() {
     setResult(null);
     setSubmitting(true);
     try {
+      const body: Record<string, unknown> = {
+        full_name: fullName.trim(),
+        title: title.trim(),
+        company_url: companyUrl.trim(),
+        plate: selectedPlate,
+        qr_url: qrUrl.trim(),
+        qr_caption: qrCaption.trim() || "Scan to connect",
+        qr_disabled: qrDisabled,
+      };
+      if (bannerEnabled && bannerEvent.trim()) {
+        body.banner = {
+          event_name: bannerEvent.trim(),
+          event_dates: bannerDates.trim(),
+          event_location: bannerLocation.trim(),
+          cta_text: bannerCtaText.trim() || "LET'S MEET",
+          cta_url: bannerCtaUrl.trim(),
+        };
+      }
       const r = await fetch(`${RENDER_SVC}/generate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          full_name: fullName.trim(),
-          title: title.trim(),
-          company_url: companyUrl.trim(),
-          plate: selectedPlate,
-        }),
+        body: JSON.stringify(body),
       });
       if (!r.ok) {
         const detail = await r.text();
@@ -210,6 +240,118 @@ export default function Home() {
             </div>
           </fieldset>
         )}
+
+        {/* QR code panel — default-on with Apollo-LinkedIn auto-fill.
+            Compact (one row of inputs) when enabled, hidden when disabled. */}
+        <fieldset className="grid gap-2">
+          <legend className="text-sm font-medium text-white/80">QR code</legend>
+          <label className="flex items-center gap-2 text-sm text-white/70">
+            <input
+              type="checkbox"
+              checked={!qrDisabled}
+              onChange={(e) => setQrDisabled(!e.target.checked)}
+              className="h-4 w-4 accent-[#055bfb]"
+            />
+            <span>
+              Show QR code{" "}
+              <span className="text-white/40">
+                (auto-fills to person&rsquo;s LinkedIn from Apollo if URL is blank)
+              </span>
+            </span>
+          </label>
+          {!qrDisabled && !bannerEnabled && (
+            <div className="grid gap-2 sm:grid-cols-[2fr_1fr]">
+              <input
+                value={qrUrl}
+                onChange={(e) => setQrUrl(e.target.value)}
+                placeholder="https://calendly.com/you/intro (or leave blank for LinkedIn)"
+                className="rounded-lg border border-white/15 bg-black/30 px-3 py-2 text-sm outline-none focus:border-white/40"
+              />
+              <input
+                value={qrCaption}
+                onChange={(e) => setQrCaption(e.target.value)}
+                placeholder="Caption"
+                maxLength={40}
+                className="rounded-lg border border-white/15 bg-black/30 px-3 py-2 text-sm outline-none focus:border-white/40"
+              />
+            </div>
+          )}
+          {!qrDisabled && bannerEnabled && (
+            <p className="text-xs text-white/40">
+              Standalone QR is hidden when the banner is on &mdash; the banner carries
+              its own CTA QR. Edit the banner&rsquo;s CTA URL instead.
+            </p>
+          )}
+        </fieldset>
+
+        {/* Banner panel — opt-in. Whole block collapsed until enabled. */}
+        <fieldset className="grid gap-2">
+          <legend className="text-sm font-medium text-white/80">Banner</legend>
+          <label className="flex items-center gap-2 text-sm text-white/70">
+            <input
+              type="checkbox"
+              checked={bannerEnabled}
+              onChange={(e) => setBannerEnabled(e.target.checked)}
+              className="h-4 w-4 accent-[#055bfb]"
+            />
+            <span>
+              Add a promotional banner along the bottom edge{" "}
+              <span className="text-white/40">
+                (event push, hiring, campaign &mdash; like the WiseStamp email banner)
+              </span>
+            </span>
+          </label>
+          {bannerEnabled && (
+            <div className="grid gap-2 rounded-lg border border-white/10 bg-white/[0.02] p-3 sm:grid-cols-2">
+              <label className="grid gap-1 sm:col-span-2">
+                <span className="text-xs font-medium text-white/70">Event / message</span>
+                <input
+                  value={bannerEvent}
+                  onChange={(e) => setBannerEvent(e.target.value)}
+                  placeholder="Gartner Marketing Symposium"
+                  className="rounded-lg border border-white/15 bg-black/30 px-3 py-2 text-sm outline-none focus:border-white/40"
+                />
+              </label>
+              <label className="grid gap-1">
+                <span className="text-xs font-medium text-white/70">Dates</span>
+                <input
+                  value={bannerDates}
+                  onChange={(e) => setBannerDates(e.target.value)}
+                  placeholder="June 8–10, 2026"
+                  className="rounded-lg border border-white/15 bg-black/30 px-3 py-2 text-sm outline-none focus:border-white/40"
+                />
+              </label>
+              <label className="grid gap-1">
+                <span className="text-xs font-medium text-white/70">Location</span>
+                <input
+                  value={bannerLocation}
+                  onChange={(e) => setBannerLocation(e.target.value)}
+                  placeholder="Denver, CO"
+                  className="rounded-lg border border-white/15 bg-black/30 px-3 py-2 text-sm outline-none focus:border-white/40"
+                />
+              </label>
+              <label className="grid gap-1">
+                <span className="text-xs font-medium text-white/70">CTA text</span>
+                <input
+                  value={bannerCtaText}
+                  onChange={(e) => setBannerCtaText(e.target.value)}
+                  placeholder="LET'S MEET"
+                  maxLength={20}
+                  className="rounded-lg border border-white/15 bg-black/30 px-3 py-2 text-sm outline-none focus:border-white/40"
+                />
+              </label>
+              <label className="grid gap-1">
+                <span className="text-xs font-medium text-white/70">CTA URL (→ QR)</span>
+                <input
+                  value={bannerCtaUrl}
+                  onChange={(e) => setBannerCtaUrl(e.target.value)}
+                  placeholder="https://calendly.com/you/intro"
+                  className="rounded-lg border border-white/15 bg-black/30 px-3 py-2 text-sm outline-none focus:border-white/40"
+                />
+              </label>
+            </div>
+          )}
+        </fieldset>
 
         <button
           type="submit"
