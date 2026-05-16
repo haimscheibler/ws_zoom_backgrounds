@@ -30,7 +30,7 @@ from . import plates as plates_mod
 from .apollo import enrich as apollo_enrich
 from .body_bg import extract_body_bg
 from .brand_scraper import BrandAssets, brand_from_apollo, scrape_brand
-from .models import BackgroundRequest, BackgroundResponse, PlateOption
+from .models import BackgroundRequest, BackgroundResponse, BrandPreview, PlateOption
 from .render import OUTPUT_DIR_DEFAULT, render_background
 
 load_dotenv()
@@ -110,13 +110,37 @@ def healthz() -> dict:
     return {"status": "ok"}
 
 
+@app.get("/preview-brand", response_model=BrandPreview)
+async def preview_brand(company_url: str) -> BrandPreview:
+    """Fast brand scrape for the front-end live preview. No Apollo, no
+    render — just homepage scrape (~500ms) for company_name + logo + brand
+    color. Called as the user types the URL so the preview reflects real
+    brand assets instead of placeholder colors."""
+    try:
+        domain = _extract_domain(company_url)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    loop = asyncio.get_event_loop()
+    brand = await loop.run_in_executor(None, scrape_brand, domain)
+    return BrandPreview(
+        domain=domain,
+        company_name=brand.company_name or domain,
+        logo_url=brand.logo_url,
+        brand_color=brand.brand_color,
+    )
+
+
 @app.get("/plates", response_model=list[PlateOption])
 def list_plates() -> list[PlateOption]:
     """Front-end picker source. Returns CSS strings the picker re-applies to
     DOM nodes to paint accurate thumbnails — keeps the server out of
     thumbnail-generation duty."""
     return [
-        PlateOption(key=p.key, label=p.label, css=p.css, text_on_light=p.text_on_light)
+        PlateOption(
+            key=p.key, label=p.label, css=p.css,
+            text_on_light=p.text_on_light,
+            image_attribution=p.image_attribution,
+        )
         for p in plates_mod.PRESETS
     ]
 

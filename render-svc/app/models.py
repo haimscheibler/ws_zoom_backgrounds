@@ -53,6 +53,20 @@ class BackgroundRequest(BaseModel):
     banner: Optional[BannerConfig] = None
 
 
+class BrandPreview(BaseModel):
+    """Lightweight brand-scrape result for the front-end live preview.
+
+    Skips Apollo entirely — this is meant to be cheap (one homepage fetch,
+    ~500ms) and called interactively as the user types the company URL.
+    The full /generate path still runs Apollo + the quality gate when the
+    user actually clicks "Generate".
+    """
+    domain: str
+    company_name: str
+    logo_url: str
+    brand_color: str
+
+
 class PlateOption(BaseModel):
     """One entry in the GET /plates picker response. `css` is the same
     string the server uses when rendering — the front-end can paint
@@ -61,6 +75,7 @@ class PlateOption(BaseModel):
     label: str
     css: str
     text_on_light: bool
+    image_attribution: str = ""  # surfaced in the picker tooltip for legal traceability
 
 
 class BackgroundResponse(BaseModel):

@@ -22,9 +22,16 @@ class Plate:
     key: str
     label: str
     css: str          # complete CSS `background:` value used in the template
-    text_on_light: bool  # True when the plate is mostly light — nametag
-    # nametag colour scheme stays the same either way (dark translucent), but
-    # this flag is exposed in case a future template variant needs to flip.
+    text_on_light: bool
+    # When set, the plate is image-backed: the CSS uses background-image
+    # pointing at this URL, with a dark gradient overlay so the watermark
+    # text stays legible against a busy photo. For production deployments
+    # the user should mirror these images to their own CDN — the Unsplash
+    # source URLs are stable but not contractually guaranteed.
+    image_url: str = ""
+    # Attribution shown nowhere in the rendered output, but logged at boot
+    # so license requirements are traceable. Required for Unsplash photos.
+    image_attribution: str = ""
 
 
 AUTO_PLATE_KEY = "auto"
@@ -77,6 +84,51 @@ PRESETS: tuple[Plate, ...] = (
             "#1b2d4f 0%, #0f1b35 50%, #060a1d 100%);"
         ),
         text_on_light=False,
+    ),
+    # ── Image-backed plates ───────────────────────────────────────────────
+    # The CSS pairs a dark gradient overlay (top transparent → bottom
+    # ~35% black) with the photo. This keeps the watermark text legible
+    # against a busy photographic background without obliterating the
+    # photo's character. `linear-gradient` is on top of `url(...)` because
+    # CSS layers paint in reverse order (first declared = topmost).
+    Plate(
+        key="office_studio",
+        label="Studio Office",
+        css=(
+            "background: "
+            "linear-gradient(180deg, rgba(0,0,0,0.0) 0%, rgba(0,0,0,0.35) 100%), "
+            "url('https://images.unsplash.com/photo-1497366216548-37526070297c?w=1920&q=80&auto=format&fit=crop') "
+            "center/cover no-repeat;"
+        ),
+        text_on_light=False,
+        image_url="https://images.unsplash.com/photo-1497366216548-37526070297c?w=1920&q=80&auto=format&fit=crop",
+        image_attribution="Photo by Nastuh Abootalebi on Unsplash",
+    ),
+    Plate(
+        key="office_warmwood",
+        label="Warm Wood",
+        css=(
+            "background: "
+            "linear-gradient(180deg, rgba(0,0,0,0.0) 0%, rgba(0,0,0,0.35) 100%), "
+            "url('https://images.unsplash.com/photo-1524758631624-e2822e304c36?w=1920&q=80&auto=format&fit=crop') "
+            "center/cover no-repeat;"
+        ),
+        text_on_light=False,
+        image_url="https://images.unsplash.com/photo-1524758631624-e2822e304c36?w=1920&q=80&auto=format&fit=crop",
+        image_attribution="Photo by Annie Spratt on Unsplash",
+    ),
+    Plate(
+        key="library",
+        label="Library",
+        css=(
+            "background: "
+            "linear-gradient(180deg, rgba(0,0,0,0.0) 0%, rgba(0,0,0,0.4) 100%), "
+            "url('https://images.unsplash.com/photo-1521587760476-6c12a4b040da?w=1920&q=80&auto=format&fit=crop') "
+            "center/cover no-repeat;"
+        ),
+        text_on_light=False,
+        image_url="https://images.unsplash.com/photo-1521587760476-6c12a4b040da?w=1920&q=80&auto=format&fit=crop",
+        image_attribution="Photo by Susan Q Yin on Unsplash",
     ),
     # The auto plate is a special case: its CSS is resolved server-side by
     # body_bg.py at /generate time, using the company's homepage's computed

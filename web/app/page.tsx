@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const RENDER_SVC = process.env.NEXT_PUBLIC_RENDER_SVC ?? "http://localhost:8080";
 
@@ -23,6 +23,14 @@ type Plate = {
   label: string;
   css: string;
   text_on_light: boolean;
+  image_attribution?: string;
+};
+
+type BrandPreviewData = {
+  domain: string;
+  company_name: string;
+  logo_url: string;
+  brand_color: string;
 };
 
 /** The mp4/poster URLs returned by the backend are relative paths in local
@@ -32,6 +40,333 @@ function absolutise(url: string): string {
   if (!url) return url;
   if (url.startsWith("http://") || url.startsWith("https://")) return url;
   return `${RENDER_SVC}${url}`;
+}
+
+/** Live preview of the watermark layout. Renders an inner 1920×1080 div
+ * laid out at the exact same positions as `background.html.j2`, wrapped
+ * in a scale-transform so the visual size stays small. Animations are
+ * disabled — the preview is a static at-a-glance check, not a render. */
+function BackgroundPreview({
+  fullName,
+  title,
+  brand,
+  plateCss,
+  qrEnabled,
+  qrCaption,
+  bannerEnabled,
+  bannerEvent,
+  bannerDates,
+  bannerLocation,
+  bannerCtaText,
+  bannerCtaUrl,
+}: {
+  fullName: string;
+  title: string;
+  brand: BrandPreviewData | null;
+  plateCss: string;
+  qrEnabled: boolean;
+  qrCaption: string;
+  bannerEnabled: boolean;
+  bannerEvent: string;
+  bannerDates: string;
+  bannerLocation: string;
+  bannerCtaText: string;
+  bannerCtaUrl: string;
+}) {
+  // Brand color falls back to WiseStamp blue when the live brand-scrape
+  // hasn't completed yet — the preview still shows accurate LAYOUT even
+  // before the color is known.
+  const brandColor = brand?.brand_color || "#055bfb";
+  const companyName = brand?.company_name || "Company";
+  const logoUrl = brand?.logo_url || "";
+
+  // Banner takes the bottom slot → nametag moves to top-left (mirrors
+  // the same logic in render.py). Standalone QR is suppressed when the
+  // banner is on (banner brings its own CTA QR).
+  const nametagTopLeft = bannerEnabled;
+  const showStandaloneQR = qrEnabled && !bannerEnabled;
+  const showBanner = bannerEnabled && bannerEvent.trim().length > 0;
+
+  // ResizeObserver-driven scale: cleaner than CSS container queries here
+  // because we can't rely on browser support across older Chromium versions
+  // in the Playwright recording context, and the math is trivial.
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const [scale, setScale] = useState(0.4);
+  useEffect(() => {
+    if (!wrapperRef.current) return;
+    const el = wrapperRef.current;
+    const update = () => setScale(el.clientWidth / 1920);
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  return (
+    <div
+      ref={wrapperRef}
+      className="relative aspect-video w-full overflow-hidden rounded-xl border border-white/15 bg-black"
+    >
+      <div
+        className="absolute left-0 top-0 origin-top-left"
+        style={{
+          width: 1920,
+          height: 1080,
+          transform: `scale(${scale})`,
+        }}
+      >
+        {/* Plate */}
+        <div
+          className="absolute inset-0"
+          style={parseInlineCss(plateCss)}
+        />
+
+        {/* Brand mark (logo) — only rendered when we have a logo from the
+            live brand scrape. The animation pulse is omitted in preview. */}
+        {logoUrl && (
+          <div
+            className="absolute"
+            style={{
+              top: 110,
+              right: 110,
+              width: 140,
+              height: 140,
+              borderRadius: "50%",
+              background: "#fff",
+              boxShadow: `0 0 0 2px ${brandColor}55, 0 10px 30px rgba(0,0,0,0.28)`,
+              overflow: "hidden",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={logoUrl}
+              alt={companyName}
+              style={{ maxWidth: 100, maxHeight: 100, objectFit: "contain" }}
+            />
+          </div>
+        )}
+
+        {/* Nametag — bottom-left by default, top-left when banner is on */}
+        <div
+          className="absolute"
+          style={{
+            ...(nametagTopLeft
+              ? { top: 110, left: 130 }
+              : { bottom: 140, left: 130 }),
+            maxWidth: 720,
+            padding: "24px 36px 24px 32px",
+            background: "rgba(10, 22, 38, 0.78)",
+            borderLeft: `6px solid ${brandColor}`,
+            borderRadius: 12,
+            color: "#fff",
+            boxShadow: "0 12px 40px rgba(0,0,0,0.35)",
+          }}
+        >
+          <p style={{ fontSize: 44, fontWeight: 700, lineHeight: 1.1, margin: 0, letterSpacing: -0.5 }}>
+            {fullName || "Your name"}
+          </p>
+          {title && (
+            <p style={{ fontSize: 22, fontWeight: 400, opacity: 0.85, margin: "6px 0 0" }}>
+              {title}
+            </p>
+          )}
+          <p
+            style={{
+              fontSize: 18,
+              fontWeight: 600,
+              letterSpacing: 0.5,
+              textTransform: "uppercase",
+              margin: "14px 0 0",
+              paddingTop: 12,
+              borderTop: "1px solid rgba(255,255,255,0.18)",
+            }}
+          >
+            <span
+              style={{
+                display: "inline-block",
+                width: 8,
+                height: 8,
+                borderRadius: "50%",
+                background: brandColor,
+                marginRight: 10,
+                verticalAlign: "middle",
+              }}
+            />
+            {companyName}
+          </p>
+        </div>
+
+        {/* Standalone QR card */}
+        {showStandaloneQR && (
+          <div
+            className="absolute"
+            style={{
+              right: 130,
+              bottom: 140,
+              width: 220,
+              padding: "14px 14px 12px",
+              background: "#fff",
+              borderRadius: 12,
+              borderLeft: `6px solid ${brandColor}`,
+              boxShadow: "0 12px 40px rgba(0,0,0,0.32)",
+              color: "#0a1626",
+            }}
+          >
+            {/* Placeholder QR — the real QR is generated server-side at
+                render time. Preview shows a styled square so the user can
+                see WHERE the QR will sit, not WHAT it encodes. */}
+            <div
+              style={{
+                width: 192,
+                height: 192,
+                margin: "0 auto",
+                background:
+                  "repeating-conic-gradient(#0a1626 0% 25%, transparent 0% 50%) 0/24px 24px",
+                opacity: 0.85,
+              }}
+            />
+            <p
+              style={{
+                margin: "8px 0 0",
+                textAlign: "center",
+                fontSize: 13,
+                fontWeight: 600,
+                letterSpacing: 0.4,
+                textTransform: "uppercase",
+                color: brandColor,
+              }}
+            >
+              {qrCaption || "Scan to connect"}
+            </p>
+          </div>
+        )}
+
+        {/* Banner */}
+        {showBanner && (
+          <div
+            className="absolute"
+            style={{
+              left: 160,
+              right: 160,
+              bottom: 50,
+              height: 280,
+              background: brandColor,
+              borderRadius: 16,
+              boxShadow: "0 20px 48px rgba(0,0,0,0.4)",
+              display: "grid",
+              gridTemplateColumns: "1fr 480px",
+              alignItems: "center",
+              padding: "0 48px",
+              color: "#fff",
+              overflow: "hidden",
+            }}
+          >
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <p
+                style={{
+                  fontSize: 24,
+                  fontWeight: 700,
+                  letterSpacing: 4,
+                  textTransform: "uppercase",
+                  opacity: 0.85,
+                  margin: 0,
+                }}
+              >
+                MEET ME AT
+              </p>
+              <p
+                style={{
+                  fontSize: 56,
+                  fontWeight: 800,
+                  lineHeight: 1.05,
+                  letterSpacing: -1,
+                  margin: 0,
+                  // 2-line clamp to keep the banner height predictable
+                  display: "-webkit-box",
+                  WebkitLineClamp: 2,
+                  WebkitBoxOrient: "vertical",
+                  overflow: "hidden",
+                }}
+              >
+                {bannerEvent}
+              </p>
+            </div>
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "flex-end",
+                gap: 14,
+              }}
+            >
+              {(bannerDates || bannerLocation) && (
+                <p
+                  style={{
+                    fontSize: 18,
+                    fontWeight: 500,
+                    opacity: 0.92,
+                    textAlign: "right",
+                    lineHeight: 1.35,
+                    margin: 0,
+                  }}
+                >
+                  {bannerDates}
+                  {bannerDates && bannerLocation && <br />}
+                  {bannerLocation}
+                </p>
+              )}
+              <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
+                {bannerCtaUrl.trim() && (
+                  <div
+                    style={{
+                      width: 132,
+                      height: 132,
+                      padding: 10,
+                      background: "#fff",
+                      borderRadius: 12,
+                      boxShadow: "0 4px 12px rgba(0,0,0,0.25)",
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: "100%",
+                        height: "100%",
+                        background:
+                          "repeating-conic-gradient(#0a1626 0% 25%, transparent 0% 50%) 0/16px 16px",
+                        opacity: 0.85,
+                      }}
+                    />
+                  </div>
+                )}
+                <span
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    height: 64,
+                    padding: "0 32px",
+                    background: "#fff",
+                    color: brandColor,
+                    fontSize: 22,
+                    fontWeight: 800,
+                    letterSpacing: 1.2,
+                    textTransform: "uppercase",
+                    borderRadius: 999,
+                    boxShadow: "0 6px 16px rgba(0,0,0,0.25)",
+                  }}
+                >
+                  {bannerCtaText || "LET'S MEET"}
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 /** Convert a plain CSS declaration string ("background: #fff; color: red;")
@@ -79,6 +414,37 @@ export default function Home() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<GenerateResponse | null>(null);
+  const [brandPreview, setBrandPreview] = useState<BrandPreviewData | null>(null);
+
+  // Debounced brand preview: when the user pauses typing in the company URL
+  // field, fetch a cheap brand-scrape so the live preview shows real colors
+  // and logo. ~500ms server round-trip on a cold domain; cached for repeats.
+  useEffect(() => {
+    const trimmed = companyUrl.trim();
+    if (trimmed.length < 4 || !trimmed.includes(".")) {
+      setBrandPreview(null);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      try {
+        const r = await fetch(
+          `${RENDER_SVC}/preview-brand?company_url=${encodeURIComponent(trimmed)}`
+        );
+        if (!r.ok) return;
+        const data = (await r.json()) as BrandPreviewData;
+        setBrandPreview(data);
+      } catch {
+        /* preview is non-essential — silently keep showing placeholder */
+      }
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [companyUrl]);
+
+  // Resolve the selected plate's CSS for the preview. The "auto" plate's
+  // CSS is a striped placeholder anyway (real color isn't known until the
+  // server resolves it at render time), so the preview reflects that.
+  const selectedPlateCss =
+    plates.find((p) => p.key === selectedPlate)?.css ?? "background: #1a2030;";
 
   useEffect(() => {
     // Fetch plate presets once on mount. Failures are silent — the picker
@@ -157,6 +523,31 @@ export default function Home() {
           1920×1080 MP4 you can drop straight into Zoom.
         </p>
       </header>
+
+      <section className="mb-6 grid gap-2">
+        <div className="flex items-center justify-between">
+          <p className="text-sm font-medium text-white/80">Live preview</p>
+          <p className="text-xs text-white/40">
+            {brandPreview
+              ? `${brandPreview.company_name} · ${brandPreview.brand_color}`
+              : "Type a company URL to load real brand colors"}
+          </p>
+        </div>
+        <BackgroundPreview
+          fullName={fullName}
+          title={title}
+          brand={brandPreview}
+          plateCss={selectedPlateCss}
+          qrEnabled={!qrDisabled}
+          qrCaption={qrCaption}
+          bannerEnabled={bannerEnabled}
+          bannerEvent={bannerEvent}
+          bannerDates={bannerDates}
+          bannerLocation={bannerLocation}
+          bannerCtaText={bannerCtaText}
+          bannerCtaUrl={bannerCtaUrl}
+        />
+      </section>
 
       <form
         onSubmit={onSubmit}
