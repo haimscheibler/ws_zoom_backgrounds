@@ -9,6 +9,13 @@ MVP — single-user flow: input company URL + name/title → animated MP4 downlo
 Later phases: directory sync, Zoom Marketplace auto-deploy, calendar-triggered
 per-meeting personalization. See sibling folder `ws_Interactive_Zoom_Backgrounds/02_PROJECT_PLAN.md`.
 
+For the **Tier 3 calendar-triggered architecture** (per-meeting personalised
+backgrounds that auto-apply 5 min before each call), see
+[ARCHITECTURE.md](ARCHITECTURE.md). Module stubs are in
+`render-svc/app/calendar/`, `scheduler.py`, and `zoom_app.py` — they raise
+`NotImplementedError` until the four external accounts (Google Calendar API,
+Microsoft Entra app, Zoom Marketplace app, GCS write IAM) are registered.
+
 ## Enrichment + quality gate
 Mirrors `Automated_Email_Signatures` policy: for each request we
   1. Query **Apollo** `/v1/people/match` with `(first_name, last_name, domain)`
