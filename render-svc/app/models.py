@@ -24,6 +24,31 @@ class BannerConfig(BaseModel):
     cta_url: str = Field(default="", max_length=400)
 
 
+class Campaign(BaseModel):
+    """A saved banner preset the marketer can reuse across renders.
+
+    `expires_at` is an opaque string (ISO date or "") — when set, the
+    frontend uses it to grey out / filter expired campaigns. The server
+    doesn't enforce expiration at /generate time; treating it as a hint
+    rather than a hard cutoff keeps last-minute "the banner expired
+    overnight but we still need to send" cases unblocked.
+    """
+    id: str
+    name: str  # marketer-facing label, e.g. "Q2 Gartner Push"
+    banner: BannerConfig
+    created_at: int  # unix seconds
+    updated_at: int  # unix seconds
+    expires_at: str = ""  # ISO date "YYYY-MM-DD" or "" for no expiry
+
+
+class CampaignCreate(BaseModel):
+    """Request body for POST /campaigns. id/created_at/updated_at are
+    server-assigned, so the client doesn't supply them."""
+    name: str = Field(min_length=1, max_length=80)
+    banner: BannerConfig
+    expires_at: str = Field(default="", max_length=20)
+
+
 class BackgroundRequest(BaseModel):
     """Input for /generate.
 

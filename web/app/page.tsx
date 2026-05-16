@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
 const RENDER_SVC = process.env.NEXT_PUBLIC_RENDER_SVC ?? "http://localhost:8080";
@@ -31,6 +32,20 @@ type BrandPreviewData = {
   company_name: string;
   logo_url: string;
   brand_color: string;
+};
+
+type SavedCampaign = {
+  id: string;
+  name: string;
+  banner: {
+    event_name: string;
+    event_dates: string;
+    event_location: string;
+    eyebrow: string;
+    cta_text: string;
+    cta_url: string;
+  };
+  expires_at: string;
 };
 
 /** The mp4/poster URLs returned by the backend are relative paths in local
@@ -416,6 +431,32 @@ export default function Home() {
   const [result, setResult] = useState<GenerateResponse | null>(null);
   const [brandPreview, setBrandPreview] = useState<BrandPreviewData | null>(null);
 
+  // Campaign library — populated once at mount; the banner section uses it
+  // to offer a "Use saved campaign" dropdown that pre-fills the fields.
+  const [campaigns, setCampaigns] = useState<SavedCampaign[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`${RENDER_SVC}/campaigns`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((list: SavedCampaign[]) => {
+        if (!cancelled) setCampaigns(list);
+      })
+      .catch(() => { /* campaigns are optional; ignore */ });
+    return () => { cancelled = true; };
+  }, []);
+
+  function applyCampaign(id: string) {
+    if (!id) return;
+    const c = campaigns.find((c) => c.id === id);
+    if (!c) return;
+    setBannerEvent(c.banner.event_name);
+    setBannerDates(c.banner.event_dates);
+    setBannerLocation(c.banner.event_location);
+    setBannerCtaText(c.banner.cta_text || "LET'S MEET");
+    setBannerCtaUrl(c.banner.cta_url);
+    if (!bannerEnabled) setBannerEnabled(true);
+  }
+
   // Debounced brand preview: when the user pauses typing in the company URL
   // field, fetch a cheap brand-scrape so the live preview shows real colors
   // and logo. ~500ms server round-trip on a cold domain; cached for repeats.
@@ -511,17 +552,25 @@ export default function Home() {
 
   return (
     <main className="mx-auto flex min-h-screen max-w-5xl flex-col px-6 py-12">
-      <header className="mb-10">
-        <h1 className="text-3xl font-bold tracking-tight">
-          Interactive Meeting Backgrounds
-          <span className="ml-2 rounded bg-white/10 px-2 py-0.5 text-xs font-medium uppercase text-white/70">
-            MVP
-          </span>
-        </h1>
-        <p className="mt-2 text-white/60">
-          Drop your name, title, and company URL — get an animated, brand-personalised
-          1920×1080 MP4 you can drop straight into Zoom.
-        </p>
+      <header className="mb-10 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">
+            Interactive Meeting Backgrounds
+            <span className="ml-2 rounded bg-white/10 px-2 py-0.5 text-xs font-medium uppercase text-white/70">
+              MVP
+            </span>
+          </h1>
+          <p className="mt-2 text-white/60">
+            Drop your name, title, and company URL — get an animated, brand-personalised
+            1920×1080 MP4 you can drop straight into Zoom.
+          </p>
+        </div>
+        <Link
+          href="/campaigns"
+          className="rounded-lg border border-white/15 px-3 py-1.5 text-sm text-white/80 transition hover:border-white/30 hover:text-white"
+        >
+          Manage campaigns →
+        </Link>
       </header>
 
       <section className="mb-6 grid gap-2">
@@ -692,6 +741,26 @@ export default function Home() {
               </span>
             </span>
           </label>
+          {bannerEnabled && campaigns.length > 0 && (
+            <label className="grid gap-1">
+              <span className="text-xs font-medium text-white/70">
+                Use saved campaign{" "}
+                <span className="text-white/40">(or leave on Custom to type your own)</span>
+              </span>
+              <select
+                defaultValue=""
+                onChange={(e) => applyCampaign(e.target.value)}
+                className="rounded-lg border border-white/15 bg-black/30 px-3 py-2 text-sm outline-none focus:border-white/40"
+              >
+                <option value="">— Custom (type below) —</option>
+                {campaigns.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           {bannerEnabled && (
             <div className="grid gap-2 rounded-lg border border-white/10 bg-white/[0.02] p-3 sm:grid-cols-2">
               <label className="grid gap-1 sm:col-span-2">

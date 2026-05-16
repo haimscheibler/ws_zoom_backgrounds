@@ -25,12 +25,20 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
+from . import campaigns as campaigns_mod
 from . import photo as photo_mod
 from . import plates as plates_mod
 from .apollo import enrich as apollo_enrich
 from .body_bg import extract_body_bg
 from .brand_scraper import BrandAssets, brand_from_apollo, scrape_brand
-from .models import BackgroundRequest, BackgroundResponse, BrandPreview, PlateOption
+from .models import (
+    BackgroundRequest,
+    BackgroundResponse,
+    BrandPreview,
+    Campaign,
+    CampaignCreate,
+    PlateOption,
+)
 from .render import OUTPUT_DIR_DEFAULT, render_background
 
 load_dotenv()
@@ -60,7 +68,7 @@ app = FastAPI(title="WiseStamp Zoom Backgrounds — Render Service")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
-    allow_methods=["GET", "POST"],
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["*"],
 )
 
@@ -108,6 +116,49 @@ def _split_name(full_name: str) -> tuple[str, str]:
 @app.get("/healthz")
 def healthz() -> dict:
     return {"status": "ok"}
+
+
+# ── Campaigns CRUD ──────────────────────────────────────────────────────────
+# Banner library: marketers create named campaigns (Gartner June Push, Q2
+# Hiring, etc.), then the /generate flow can reference a campaign id instead
+# of passing the banner fields free-form. No auth in MVP — production must
+# gate these endpoints behind admin auth.
+
+@app.get("/campaigns", response_model=list[Campaign])
+def list_campaigns() -> list[Campaign]:
+    return campaigns_mod.list_all()
+
+
+@app.post("/campaigns", response_model=Campaign, status_code=201)
+def create_campaign(payload: CampaignCreate) -> Campaign:
+    return campaigns_mod.create(
+        name=payload.name, banner=payload.banner, expires_at=payload.expires_at,
+    )
+
+
+@app.get("/campaigns/{campaign_id}", response_model=Campaign)
+def get_campaign(campaign_id: str) -> Campaign:
+    c = campaigns_mod.get(campaign_id)
+    if c is None:
+        raise HTTPException(status_code=404, detail="campaign not found")
+    return c
+
+
+@app.put("/campaigns/{campaign_id}", response_model=Campaign)
+def update_campaign(campaign_id: str, payload: CampaignCreate) -> Campaign:
+    c = campaigns_mod.update(
+        campaign_id,
+        name=payload.name, banner=payload.banner, expires_at=payload.expires_at,
+    )
+    if c is None:
+        raise HTTPException(status_code=404, detail="campaign not found")
+    return c
+
+
+@app.delete("/campaigns/{campaign_id}", status_code=204)
+def delete_campaign(campaign_id: str) -> None:
+    if not campaigns_mod.delete(campaign_id):
+        raise HTTPException(status_code=404, detail="campaign not found")
 
 
 @app.get("/preview-brand", response_model=BrandPreview)
