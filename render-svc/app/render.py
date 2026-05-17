@@ -77,6 +77,59 @@ def _make_slug(full_name: str, domain: str) -> str:
     return f"{base[:50]}_{int(time.time())}"
 
 
+def _generate_welcome_keyframes(total_layers: int) -> str:
+    """Build the CSS @keyframes blocks for a multi-state banner with
+    `total_layers` content layers (regular + N welcomes).
+
+    Each layer is visible during its own slot (1/total_layers of the cycle),
+    with a short crossfade overlap at slot boundaries. Layer 0 (regular)
+    needs special handling so the loop seams cleanly — its fade-in lives
+    at the *end* of the cycle (transitioning from the last welcome's fade
+    out), and 0% / 100% both pin to opacity 1 for a seamless wrap.
+
+    Returns a CSS string with one `@keyframes welcome-layer-{i}` block
+    per layer; the template references these by class name.
+    """
+    if total_layers < 2:
+        return ""
+
+    # Fade buffer = the slice of the cycle spent crossfading at each
+    # boundary. Smaller buffer → snappier transitions; larger → softer.
+    slot_pct = 100.0 / total_layers
+    fade_pct = min(3.5, slot_pct * 0.25)
+
+    blocks: list[str] = []
+    for i in range(total_layers):
+        slot_start = i * slot_pct
+        slot_end = (i + 1) * slot_pct
+
+        if i == 0:
+            # Layer 0 is the regular banner content. Visible at the start
+            # AND back at the end of the cycle (so the seamless loop wraps
+            # without a black flash). Last layer's fade-out window is
+            # [100-fade, 100], and ours is the simultaneous fade-in.
+            blocks.append(
+                f"@keyframes welcome-layer-0 {{\n"
+                f"  0%, {slot_end - fade_pct:.2f}% {{ opacity: 1; }}\n"
+                f"  {slot_end + fade_pct:.2f}% {{ opacity: 0; }}\n"
+                f"  {100 - fade_pct:.2f}% {{ opacity: 0; }}\n"
+                f"  100% {{ opacity: 1; }}\n"
+                f"}}"
+            )
+        else:
+            # Middle / final welcome layers. Hidden at 0% and 100%, visible
+            # only during their slot, with crossfades at both boundaries.
+            blocks.append(
+                f"@keyframes welcome-layer-{i} {{\n"
+                f"  0%, {slot_start - fade_pct:.2f}% {{ opacity: 0; }}\n"
+                f"  {slot_start + fade_pct:.2f}% {{ opacity: 1; }}\n"
+                f"  {slot_end - fade_pct:.2f}% {{ opacity: 1; }}\n"
+                f"  {slot_end + fade_pct:.2f}%, 100% {{ opacity: 0; }}\n"
+                f"}}"
+            )
+    return "\n".join(blocks)
+
+
 def inline_image_from_path(path: Path, content_type: str = "image/png") -> str:
     """Public helper: read a local image file and return a `data:` URL.
     Used for user-uploaded plates and banners where the bytes live on this
@@ -168,6 +221,27 @@ def _render_html(
         render_qr_data_uri(banner.cta_url) if (show_banner and banner.cta_url) else ""
     )
 
+    # Multi-state welcome banners: when the banner has welcome_states set,
+    # the template stacks N+1 layers (regular + each welcome) with each
+    # layer's @keyframes generated below. Loop length stretches with the
+    # number of states so each gets ~4s of visible time.
+    welcome_states_data: list[dict] = []
+    multi_keyframes_css = ""
+    multi_loop_seconds = 0
+    if show_banner and banner.welcome_states:
+        welcome_states_data = [
+            {"text": w.text, "brand_color": w.brand_color}
+            for w in banner.welcome_states
+        ]
+        total_layers = 1 + len(welcome_states_data)  # 1 regular + N welcomes
+        # ~4s per state, but capped/floored so really long meetings still
+        # render in a sensible-length MP4. Banner cycle matches the master
+        # loop length so the recorded clip captures exactly one full cycle.
+        multi_loop_seconds = max(10, min(40, total_layers * 4))
+        multi_keyframes_css = _generate_welcome_keyframes(total_layers)
+        log.info("    banner multi-welcome: %d states, %ds loop",
+                 len(welcome_states_data), multi_loop_seconds)
+
     # If the banner has a pre-uploaded image, resolve and inline it now.
     # The image_url is server-relative (/uploads/banners/X.ext); the bytes
     # live on local disk. Inlining lets the Playwright `file://` render see
@@ -213,6 +287,9 @@ def _render_html(
         banner=banner,
         banner_qr_data_uri=banner_qr_data_uri,
         banner_image_data_uri=banner_image_data_uri,
+        welcome_states=welcome_states_data,
+        multi_welcome_keyframes_css=multi_keyframes_css,
+        multi_welcome_loop_seconds=multi_loop_seconds,
     )
 
 
@@ -338,6 +415,18 @@ def render_background(
         full_name, title, brand, plate_css, photo_url,
         qr_url=qr_url, qr_caption=qr_caption, banner=banner,
     )
+
+    # When the banner has multiple welcome states, the banner cycle is
+    # longer than the default 10s — stretch the recorded loop so ffmpeg
+    # captures a full cycle (otherwise the MP4 would loop mid-state and
+    # the viewer would see a jarring jump).
+    if banner is not None and banner.welcome_states:
+        total_layers = 1 + len(banner.welcome_states)
+        effective_loop = max(loop_seconds, min(40, total_layers * 4))
+        if effective_loop != loop_seconds:
+            log.info("    loop length adjusted: %ds → %ds for %d welcome states",
+                     loop_seconds, effective_loop, len(banner.welcome_states))
+            loop_seconds = effective_loop
 
     with tempfile.TemporaryDirectory(prefix="zoombg_") as tmp:
         tmp_path = Path(tmp)

@@ -46,6 +46,7 @@ from .models import (
     MeetingCreate,
     MeetingRenderRequest,
     PlateOption,
+    WelcomeState,
 )
 from .render import OUTPUT_DIR_DEFAULT, render_background
 
@@ -247,15 +248,35 @@ async def render_meeting(meeting_id: str, ae: MeetingRenderRequest) -> Meeting:
         # 1. AE's own domain — explicit override or derive from URL
         ae_domain = ae.own_domain or _extract_domain(ae.company_url)
 
-        # 2. Resolve primary external company from attendees
+        # 2. Resolve ALL external companies in the meeting (not just the
+        #    primary). For a 1:1 with one external attendee, this returns
+        #    a single company; for a multi-company call (e.g. partner +
+        #    customer joint pitch), it returns one entry per company so
+        #    each gets their own welcome banner painted in their own
+        #    brand color.
         emails = [a.email for a in meeting.attendees]
-        resolution = attendees_mod.resolve(
+        companies = attendees_mod.resolve_all(
             emails,
             organiser_email=f"{ae.full_name.lower().replace(' ', '.')}@{ae_domain}",
             organiser_company_domain=ae_domain,
-            event_title=meeting.title,
         )
-        if not resolution.primary_domain:
+        # Title-derived fallback when there are no external attendees
+        # (some meetings list nobody but the organiser). We still want a
+        # banner pointing at the right company.
+        if not companies:
+            fallback = attendees_mod.resolve(
+                emails,
+                organiser_email=f"{ae.full_name.lower().replace(' ', '.')}@{ae_domain}",
+                organiser_company_domain=ae_domain,
+                event_title=meeting.title,
+            )
+            if fallback.primary_domain:
+                companies = [attendees_mod.CompanyOnMeeting(
+                    domain=fallback.primary_domain,
+                    representative_email=fallback.primary_email,
+                    attendee_count=0,
+                )]
+        if not companies:
             raise HTTPException(
                 status_code=422,
                 detail=(
@@ -264,25 +285,45 @@ async def render_meeting(meeting_id: str, ae: MeetingRenderRequest) -> Meeting:
                     "or a personal-email provider."
                 ),
             )
-        log.info("    meeting %s: external company → %s (%s)",
-                 meeting_id, resolution.primary_domain, resolution.rationale)
+        log.info("    meeting %s: %d external companies → %s",
+                 meeting_id, len(companies),
+                 ", ".join(c.domain for c in companies))
 
-        # 3. Get the external company's display name. Quick scrape only —
-        #    not the full Apollo path (that runs inside /generate below
-        #    for the AE's *own* branding).
+        # 3. Brand-scrape each external company in parallel. We only need
+        #    their display name + brand color — no full Apollo path. Done
+        #    concurrently because each scrape is ~500ms of network and
+        #    a 3-company meeting otherwise stacks 1.5s of sequential I/O.
         loop = asyncio.get_event_loop()
-        ext_brand = await loop.run_in_executor(
-            None, scrape_brand, resolution.primary_domain,
-        )
-        company_display = ext_brand.company_name or resolution.primary_domain
 
-        # 4. Compose meeting-specific banner
-        welcome = meeting.welcome_template.format(company=company_display)
+        async def _scrape(domain: str) -> tuple[str, str]:
+            brand = await loop.run_in_executor(None, scrape_brand, domain)
+            return brand.company_name or domain, brand.brand_color
+
+        scraped = await asyncio.gather(
+            *(_scrape(c.domain) for c in companies),
+            return_exceptions=False,
+        )
+
+        # 4. Compose welcome states — one per external company. Each carries
+        #    its own brand color so the banner background paints in their
+        #    palette while their welcome is rotating in.
+        welcome_states: list[WelcomeState] = []
+        for company, (company_display, company_color) in zip(companies, scraped):
+            welcome_states.append(WelcomeState(
+                text=meeting.welcome_template.format(company=company_display),
+                brand_color=company_color,
+            ))
+
+        # The "primary" company for response metadata = the most-represented
+        # external company (first in the resolve_all sort order).
+        primary_company_display = welcome_states[0].text
+        primary_domain = companies[0].domain
+
         banner = BannerConfig(
             event_name=meeting.title,
             cta_text="LET'S CONNECT",
             cta_url=ae.qr_url,
-            welcome_text=welcome,
+            welcome_states=welcome_states,
         )
 
         # 5. Dispatch /generate with AE's branding
@@ -298,14 +339,19 @@ async def render_meeting(meeting_id: str, ae: MeetingRenderRequest) -> Meeting:
         result = await generate(bg_req)
 
         # 6. Persist render state
+        # `primary_company_name` surfaces the most-represented external
+        # company for the meetings-page UI badge ("Auto-detected company →
+        # Stripe"). When the meeting has multiple companies, the UI can
+        # show all of them later — for now we show the top one and the UI
+        # can grow a "+N more" affordance.
         return meetings_mod.update(
             meeting_id,
             render_status="ready",
             rendered_at=int(time.time()),
             rendered_mp4_url=result.mp4_url,
             rendered_poster_url=result.poster_url,
-            primary_company_name=company_display,
-            primary_domain=resolution.primary_domain,
+            primary_company_name=scraped[0][0],
+            primary_domain=primary_domain,
             last_render_error="",
         )
     except HTTPException as e:

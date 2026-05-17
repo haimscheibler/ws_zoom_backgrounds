@@ -31,6 +31,16 @@ class AttendeeResolution:
     rationale: str               # human-readable reason — surfaced in logs
 
 
+@dataclass
+class CompanyOnMeeting:
+    """One external company present in a meeting. The meeting-render
+    orchestrator builds a list of these and creates one welcome layer per
+    entry (each in that company's brand color)."""
+    domain: str
+    representative_email: str    # first attendee at this domain — for any lookup that needs an actual email
+    attendee_count: int          # how many attendees from this domain
+
+
 def _domain_of(email: str) -> str:
     """Lower-case domain part of an email, or "" if not parseable."""
     m = re.match(r"^[^@]+@([A-Za-z0-9.-]+\.[A-Za-z]{2,})$", email.strip())
@@ -103,6 +113,44 @@ def resolve(
             else "no external attendees and title didn't yield a domain"
         ),
     )
+
+
+def resolve_all(
+    attendees: list[str],
+    *,
+    organiser_email: str,
+    organiser_company_domain: str,
+) -> list[CompanyOnMeeting]:
+    """Return every external company represented in the attendee list,
+    sorted by attendee count (most-represented first). Used by the
+    meeting-render orchestrator to produce one welcome banner per company
+    when there are multiple external companies in the same meeting
+    (e.g., a joint customer + partner call).
+
+    Same filtering as `resolve()`: drop the organiser's domain, drop
+    generic personal-email providers. Returns [] when no external
+    company is found — caller falls back to no welcome layer."""
+    org_domain = (organiser_company_domain or "").lower()
+    by_domain: dict[str, list[str]] = {}
+    for email in attendees:
+        d = _domain_of(email)
+        if not d or d == org_domain or d in GENERIC_EMAIL_DOMAINS:
+            continue
+        by_domain.setdefault(d, []).append(email)
+
+    result = [
+        CompanyOnMeeting(
+            domain=d,
+            representative_email=emails[0],
+            attendee_count=len(emails),
+        )
+        for d, emails in by_domain.items()
+    ]
+    # Highest attendee count first; ties broken alphabetically for
+    # reproducibility (matters in tests + when re-rendering the same
+    # meeting from two replicas).
+    result.sort(key=lambda c: (-c.attendee_count, c.domain))
+    return result
 
 
 # Patterns that show up in salespeople's calendar event titles:

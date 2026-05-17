@@ -6,6 +6,15 @@ from typing import Optional
 from pydantic import BaseModel, Field
 
 
+class WelcomeState(BaseModel):
+    """One welcome layer in a multi-company meeting banner. The banner
+    background swaps to `brand_color` while this state is visible, so each
+    attending company sees a banner painted in their own brand color when
+    their welcome rotates in."""
+    text: str = Field(min_length=1, max_length=120)
+    brand_color: str = Field(default="#055bfb", max_length=10)  # #RRGGBB
+
+
 class BannerConfig(BaseModel):
     """Event-style promotional banner — ports the email-signature banner.py
     layout (eyebrow + title + date/location + CTA pill) to the bottom edge
@@ -33,6 +42,14 @@ class BannerConfig(BaseModel):
     # state on the master 10s loop — 4s regular, 1s fade, 4s welcome,
     # 1s fade back. When blank, banner is static (existing behaviour).
     welcome_text: str = Field(default="", max_length=80)
+    # Multi-company welcomes (used by the meeting-render orchestrator).
+    # When non-empty, takes priority over welcome_text — banner cycles
+    # through (regular + welcome_states[0] + welcome_states[1] + ...) with
+    # each welcome layer painted in its own brand_color background. The
+    # number of layers determines the loop length so each state gets
+    # ~4 seconds of visible time regardless of how many companies are
+    # in the meeting.
+    welcome_states: list[WelcomeState] = []
 
 
 class Campaign(BaseModel):
