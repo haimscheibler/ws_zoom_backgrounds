@@ -15,6 +15,10 @@ render-svc/app/.body_bg_cache.json
 # Campaign library — per-deployment marketer state, not source
 render-svc/app/.campaigns.json
 
+# Custom plate uploads — per-deployment user content
+render-svc/app/.custom_plates.json
+render-svc/app/static/uploads/
+
 # Node
 node_modules/
 .next/

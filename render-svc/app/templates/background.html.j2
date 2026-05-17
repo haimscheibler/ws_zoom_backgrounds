@@ -320,6 +320,23 @@
       display: block;
       image-rendering: pixelated;
     }
+
+    /* Image-only banner: the wrapper keeps the same drop shadow + corners
+       so the slot reads as the banner; the image fills the available width
+       at the natural aspect ratio. The user's uploaded banner should ideally
+       be ~5:1-7:1 wide-to-tall to match the slot; anything taller gets
+       clipped at the bottom edge (overflow:hidden on .banner). */
+    .banner.banner-image-only {
+      padding: 0;
+      grid-template-columns: 1fr;
+      background: transparent;
+    }
+    .banner.banner-image-only img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
   </style>
 </head>
 <body>
@@ -350,27 +367,36 @@
   {% endif %}
 
   {% if show_banner and banner %}
-  <div class="banner">
-    <div class="left">
-      <p class="eyebrow">{{ banner.eyebrow }}</p>
-      <p class="event">{{ banner.event_name }}</p>
-    </div>
-    <div class="right">
-      {% if banner.event_dates or banner.event_location %}
-      <p class="date-place">
-        {% if banner.event_dates %}{{ banner.event_dates }}{% endif %}
-        {% if banner.event_dates and banner.event_location %}<br>{% endif %}
-        {% if banner.event_location %}{{ banner.event_location }}{% endif %}
-      </p>
-      {% endif %}
-      <div class="right-row">
-        {% if banner_qr_data_uri %}
-        <div class="banner-qr"><img src="{{ banner_qr_data_uri }}" alt="QR code"></div>
-        {% endif %}
-        <span class="cta-pill">{{ banner.cta_text }}</span>
+    {% if banner_image_data_uri %}
+      {# Pre-uploaded banner image — paint as-is, no text composition. The
+         wrapper keeps the same insets + drop shadow so it visually slots
+         into the same spot as the text banner. #}
+      <div class="banner banner-image-only">
+        <img src="{{ banner_image_data_uri }}" alt="">
       </div>
-    </div>
-  </div>
+    {% else %}
+      <div class="banner">
+        <div class="left">
+          <p class="eyebrow">{{ banner.eyebrow }}</p>
+          <p class="event">{{ banner.event_name }}</p>
+        </div>
+        <div class="right">
+          {% if banner.event_dates or banner.event_location %}
+          <p class="date-place">
+            {% if banner.event_dates %}{{ banner.event_dates }}{% endif %}
+            {% if banner.event_dates and banner.event_location %}<br>{% endif %}
+            {% if banner.event_location %}{{ banner.event_location }}{% endif %}
+          </p>
+          {% endif %}
+          <div class="right-row">
+            {% if banner_qr_data_uri %}
+            <div class="banner-qr"><img src="{{ banner_qr_data_uri }}" alt="QR code"></div>
+            {% endif %}
+            <span class="cta-pill">{{ banner.cta_text }}</span>
+          </div>
+        </div>
+      </div>
+    {% endif %}
   {% endif %}
 </body>
 </html>

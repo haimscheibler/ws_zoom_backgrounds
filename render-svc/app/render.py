@@ -77,6 +77,21 @@ def _make_slug(full_name: str, domain: str) -> str:
     return f"{base[:50]}_{int(time.time())}"
 
 
+def inline_image_from_path(path: Path, content_type: str = "image/png") -> str:
+    """Public helper: read a local image file and return a `data:` URL.
+    Used for user-uploaded plates and banners where the bytes live on this
+    server's disk — bypassing any HTTP fetch keeps custom uploads usable
+    when PUBLIC_BASE_URL isn't set and from Chromium's `file://` page
+    context."""
+    try:
+        raw = path.read_bytes()
+    except OSError as e:
+        log.warning("inline_image_from_path failed (%s): %s", path, e)
+        return ""
+    b64 = base64.b64encode(raw).decode("ascii")
+    return f"data:{content_type};base64,{b64}"
+
+
 def _inline_image(url: str, *, label: str = "image") -> str:
     """Fetch image bytes and return a `data:` URL so the template doesn't
     depend on a network round-trip during render. Chromium's `networkidle`
@@ -152,9 +167,31 @@ def _render_html(
     banner_qr_data_uri = (
         render_qr_data_uri(banner.cta_url) if (show_banner and banner.cta_url) else ""
     )
+
+    # If the banner has a pre-uploaded image, resolve and inline it now.
+    # The image_url is server-relative (/uploads/banners/X.ext); the bytes
+    # live on local disk. Inlining lets the Playwright `file://` render see
+    # them without needing network access back to the API.
+    banner_image_data_uri = ""
+    if show_banner and banner.image_url:
+        # Local import to avoid circular dep with uploads.py (uploads
+        # imports nothing from render but the inverse risks future churn).
+        from . import uploads as uploads_mod
+        path = uploads_mod.get_banner_path(banner.image_url)
+        if path is not None:
+            import mimetypes
+            ctype, _ = mimetypes.guess_type(str(path))
+            banner_image_data_uri = inline_image_from_path(
+                path, ctype or "image/png",
+            )
+        if not banner_image_data_uri:
+            log.warning("    banner: image_url=%s not resolvable; falling back to text composition",
+                        banner.image_url)
+
     if show_banner:
-        log.info("    banner: %s | cta_qr=%s",
-                 banner.event_name, bool(banner_qr_data_uri))
+        log.info("    banner: %s | cta_qr=%s | uploaded_img=%s",
+                 banner.event_name, bool(banner_qr_data_uri),
+                 bool(banner_image_data_uri))
     elif show_standalone_qr:
         log.info("    standalone QR: rendered (%d chars)", len(qr_url))
 
@@ -175,6 +212,7 @@ def _render_html(
         show_banner=show_banner,
         banner=banner,
         banner_qr_data_uri=banner_qr_data_uri,
+        banner_image_data_uri=banner_image_data_uri,
     )
 
 

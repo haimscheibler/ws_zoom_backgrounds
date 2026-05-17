@@ -15,6 +15,11 @@ class BannerConfig(BaseModel):
     banner so meeting participants can "click" it from their phone. Without
     a cta_url the banner still renders but with no QR — useful for pure
     awareness pushes ("Hiring engineers!") where there's no booking link.
+
+    When `image_url` is set (a path returned from `POST /uploads/banner`),
+    we skip the text-composition path entirely and render the uploaded
+    image at the banner slot. event_name remains required as a fallback
+    so the form's validation stays consistent — but it's not used visually.
     """
     event_name: str = Field(min_length=1, max_length=80)
     event_dates: str = Field(default="", max_length=60)
@@ -22,6 +27,7 @@ class BannerConfig(BaseModel):
     eyebrow: str = Field(default="MEET ME AT", max_length=40)
     cta_text: str = Field(default="LET'S MEET", max_length=20)
     cta_url: str = Field(default="", max_length=400)
+    image_url: str = Field(default="", max_length=400)  # /uploads/banners/X.ext when uploaded
 
 
 class Campaign(BaseModel):
@@ -101,6 +107,7 @@ class PlateOption(BaseModel):
     css: str
     text_on_light: bool
     image_attribution: str = ""  # surfaced in the picker tooltip for legal traceability
+    is_custom: bool = False      # true for user-uploaded plates; lets the picker show a delete affordance
 
 
 class BackgroundResponse(BaseModel):

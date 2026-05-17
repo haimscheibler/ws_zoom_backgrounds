@@ -21,13 +21,14 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from . import campaigns as campaigns_mod
 from . import photo as photo_mod
 from . import plates as plates_mod
+from . import uploads as uploads_mod
 from .apollo import enrich as apollo_enrich
 from .body_bg import extract_body_bg
 from .brand_scraper import BrandAssets, brand_from_apollo, scrape_brand
@@ -75,6 +76,16 @@ app.add_middleware(
 OUTPUT_DIR = Path(os.environ.get("OUTPUT_DIR") or OUTPUT_DIR_DEFAULT)
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 app.mount("/output", StaticFiles(directory=str(OUTPUT_DIR)), name="output")
+
+# User uploads (custom plates + banner images). Served as static files so
+# the picker thumbnails resolve via plain HTTP. Render-time inlining
+# bypasses this mount entirely and reads the file directly.
+uploads_mod.UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+app.mount(
+    "/uploads",
+    StaticFiles(directory=str(uploads_mod.UPLOADS_DIR)),
+    name="uploads",
+)
 
 
 def _extract_domain(company_url: str) -> str:
@@ -181,12 +192,44 @@ async def preview_brand(company_url: str) -> BrandPreview:
     )
 
 
+def _custom_plate_to_option(record: dict) -> PlateOption:
+    """Convert a custom-upload record to a PlateOption for /plates.
+
+    Picker CSS uses an absolute URL so the browser can fetch the image
+    from the render-svc origin (not the Next.js origin where the picker
+    runs). The same image is inlined as a data URL at render time —
+    bypassing this URL entirely — so the thumbnail and the render are
+    independent paths that both work.
+    """
+    base = os.environ.get("PUBLIC_BASE_URL", "").rstrip("/")
+    if not base:
+        # In local dev the picker fetches the image directly from this
+        # service's origin. Hard-code the local port so the picker still
+        # works even when the front-end's NEXT_PUBLIC_RENDER_SVC and our
+        # listen port get out of sync.
+        base = "http://localhost:8080"
+    image_url = f"{base}{record['url']}"
+    return PlateOption(
+        key=f"custom_{record['id']}",
+        label=record["label"],
+        css=(
+            "background: linear-gradient(180deg, rgba(0,0,0,0.0) 0%, "
+            "rgba(0,0,0,0.35) 100%), "
+            f"url('{image_url}') center/cover no-repeat;"
+        ),
+        text_on_light=False,
+        image_attribution="Custom upload",
+        is_custom=True,
+    )
+
+
 @app.get("/plates", response_model=list[PlateOption])
 def list_plates() -> list[PlateOption]:
     """Front-end picker source. Returns CSS strings the picker re-applies to
     DOM nodes to paint accurate thumbnails — keeps the server out of
-    thumbnail-generation duty."""
-    return [
+    thumbnail-generation duty. Built-in presets come first; user-uploaded
+    custom plates appended at the end (newest-first within that group)."""
+    out = [
         PlateOption(
             key=p.key, label=p.label, css=p.css,
             text_on_light=p.text_on_light,
@@ -194,6 +237,61 @@ def list_plates() -> list[PlateOption]:
         )
         for p in plates_mod.PRESETS
     ]
+    out.extend(_custom_plate_to_option(r) for r in uploads_mod.list_custom_plates())
+    return out
+
+
+# ── Custom plate uploads ────────────────────────────────────────────────────
+
+@app.post("/upload/plate", response_model=PlateOption, status_code=201)
+async def upload_plate(
+    file: UploadFile = File(...),
+    label: str = Form(""),
+) -> PlateOption:
+    """Multipart upload for a custom Zoom-background image. Stored on disk
+    + catalogued in `.custom_plates.json`; appears in /plates afterwards
+    and renders just like a built-in image plate."""
+    if not (file.content_type or "").startswith("image/"):
+        raise HTTPException(status_code=400, detail="upload must be an image")
+    raw = await file.read()
+    try:
+        record = uploads_mod.save_plate_upload(
+            raw,
+            filename=file.filename or "",
+            content_type=file.content_type or "image/png",
+            label=label,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=413, detail=str(e))
+    return _custom_plate_to_option(record)
+
+
+@app.delete("/upload/plate/{plate_id}", status_code=204)
+def delete_uploaded_plate(plate_id: str) -> None:
+    if not uploads_mod.delete_custom_plate(plate_id):
+        raise HTTPException(status_code=404, detail="custom plate not found")
+
+
+# ── Pre-built banner uploads ─────────────────────────────────────────────────
+
+@app.post("/upload/banner", status_code=201)
+async def upload_banner(file: UploadFile = File(...)) -> dict:
+    """One-shot upload for a pre-rendered banner image. The caller takes
+    the returned `image_url` and stuffs it into BannerConfig.image_url
+    on the /generate request — the render path will inline the bytes and
+    composite the image at the bottom-edge banner slot."""
+    if not (file.content_type or "").startswith("image/"):
+        raise HTTPException(status_code=400, detail="upload must be an image")
+    raw = await file.read()
+    try:
+        rec = uploads_mod.save_banner_upload(
+            raw,
+            filename=file.filename or "",
+            content_type=file.content_type or "image/png",
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=413, detail=str(e))
+    return {"image_url": rec["url"], "id": rec["id"]}
 
 
 @app.post("/generate", response_model=BackgroundResponse)
@@ -273,26 +371,63 @@ async def generate(req: BackgroundRequest) -> BackgroundResponse:
         else "scrape"
     )
 
-    # Plate: caller's choice, unknown keys silently fall back to the default.
-    plate = plates_mod.get(req.plate)
-    plate_css = plate.css
+    # Plate resolution. Three paths:
+    #   - "custom_X": user-uploaded image; inline from disk
+    #   - "auto":     scrape homepage body bg via Playwright
+    #   - anything else: built-in preset (or fallback to default on miss)
+    # `effective_plate_key` is what we surface in the response — distinct
+    # from `plate.key` because the auto-plate fallback path mutates the
+    # plate object but we want the response to show what the user asked for
+    # when it matched, and the fallback's key when it didn't.
+    plate_css: str
+    effective_plate_key: str
 
-    # Special-case the auto plate: resolve its CSS from the company's
-    # homepage body bg at request time. If extraction yields nothing usable
-    # (transparent, near-white, or homepage unreachable), fall back to the
-    # default plate's CSS so we still produce a render — the response's
-    # plate_key will reflect the actual rendered plate.
-    if plate.key == plates_mod.AUTO_PLATE_KEY:
+    if req.plate.startswith("custom_"):
+        custom_id = req.plate[len("custom_"):]
+        record = uploads_mod.get_custom_plate(custom_id)
+        if record:
+            path = Path(record["path"])
+            if path.exists():
+                from .render import inline_image_from_path
+                data_uri = inline_image_from_path(
+                    path, record.get("content_type", "image/png"),
+                )
+                plate_css = (
+                    "background: linear-gradient(180deg, rgba(0,0,0,0.0) 0%, "
+                    "rgba(0,0,0,0.35) 100%), "
+                    f"url('{data_uri}') center/cover no-repeat;"
+                )
+                effective_plate_key = req.plate
+                log.info("    plate: %s (%s)", req.plate, record["label"])
+            else:
+                # Metadata exists but file is gone — surface the mismatch
+                # in the log and fall back rather than silently 500'ing.
+                fallback = plates_mod.get("")
+                plate_css = fallback.css
+                effective_plate_key = fallback.key
+                log.warning("    plate: custom file missing, fallback → %s",
+                            fallback.key)
+        else:
+            fallback = plates_mod.get("")
+            plate_css = fallback.css
+            effective_plate_key = fallback.key
+            log.warning("    plate: custom_%s not found, fallback → %s",
+                        custom_id, fallback.key)
+    elif req.plate == plates_mod.AUTO_PLATE_KEY:
         resolved_hex = await loop.run_in_executor(None, extract_body_bg, domain)
         if resolved_hex:
             plate_css = f"background: {resolved_hex};"
+            effective_plate_key = plates_mod.AUTO_PLATE_KEY
             log.info("    plate: auto → %s", resolved_hex)
         else:
-            fallback = plates_mod.get("")  # default plate
-            plate = fallback
+            fallback = plates_mod.get("")
             plate_css = fallback.css
+            effective_plate_key = fallback.key
             log.info("    plate: auto unusable, fallback → %s", fallback.key)
     else:
+        plate = plates_mod.get(req.plate)
+        plate_css = plate.css
+        effective_plate_key = plate.key
         log.info("    plate: %s", plate.key)
 
     loop_seconds = int(os.environ.get("LOOP_SECONDS", "10"))
@@ -333,5 +468,5 @@ async def generate(req: BackgroundRequest) -> BackgroundResponse:
         linkedin_url=apollo.linkedin_url,
         socials=socials,
         enrichment_source=enrichment_source,
-        plate_key=plate.key,
+        plate_key=effective_plate_key,
     )

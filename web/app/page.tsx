@@ -74,6 +74,7 @@ function BackgroundPreview({
   bannerLocation,
   bannerCtaText,
   bannerCtaUrl,
+  bannerImageSrc,
 }: {
   fullName: string;
   title: string;
@@ -87,6 +88,7 @@ function BackgroundPreview({
   bannerLocation: string;
   bannerCtaText: string;
   bannerCtaUrl: string;
+  bannerImageSrc: string;  // local object URL (preview) or server URL (after upload)
 }) {
   // Brand color falls back to WiseStamp blue when the live brand-scrape
   // hasn't completed yet — the preview still shows accurate LAYOUT even
@@ -100,7 +102,9 @@ function BackgroundPreview({
   // banner is on (banner brings its own CTA QR).
   const nametagTopLeft = bannerEnabled;
   const showStandaloneQR = qrEnabled && !bannerEnabled;
-  const showBanner = bannerEnabled && bannerEvent.trim().length > 0;
+  // Banner shows when either an image was uploaded OR the user typed an
+  // event name. Either path satisfies the server-side render.
+  const showBanner = bannerEnabled && (bannerImageSrc.length > 0 || bannerEvent.trim().length > 0);
 
   // ResizeObserver-driven scale: cleaner than CSS container queries here
   // because we can't rely on browser support across older Chromium versions
@@ -259,8 +263,28 @@ function BackgroundPreview({
           </div>
         )}
 
-        {/* Banner */}
-        {showBanner && (
+        {/* Banner — uploaded image takes precedence over text composition */}
+        {showBanner && bannerImageSrc && (
+          <div
+            className="absolute overflow-hidden"
+            style={{
+              left: 160,
+              right: 160,
+              bottom: 50,
+              height: 280,
+              borderRadius: 16,
+              boxShadow: "0 20px 48px rgba(0,0,0,0.4)",
+            }}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={bannerImageSrc}
+              alt=""
+              style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+            />
+          </div>
+        )}
+        {showBanner && !bannerImageSrc && (
           <div
             className="absolute"
             style={{
@@ -426,6 +450,13 @@ export default function Home() {
   const [bannerCtaText, setBannerCtaText] = useState("LET'S MEET");
   const [bannerCtaUrl, setBannerCtaUrl] = useState("");
 
+  // Pre-rendered banner image: when set, server skips the text-composition
+  // path and renders this PNG/JPG at the banner slot instead. Cleared by
+  // setting back to "" — the text fields are still around as a fallback.
+  const [bannerImageUrl, setBannerImageUrl] = useState("");
+  const [bannerImagePreview, setBannerImagePreview] = useState("");  // object-URL for local preview before submit
+  const [bannerUploading, setBannerUploading] = useState(false);
+
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<GenerateResponse | null>(null);
@@ -444,6 +475,77 @@ export default function Home() {
       .catch(() => { /* campaigns are optional; ignore */ });
     return () => { cancelled = true; };
   }, []);
+
+  // Refetch plates from the server — used after upload/delete so the
+  // picker reflects the new state without a full page reload.
+  async function refreshPlates(): Promise<Plate[]> {
+    const r = await fetch(`${RENDER_SVC}/plates`);
+    if (!r.ok) return [];
+    const list = (await r.json()) as Plate[];
+    setPlates(list);
+    return list;
+  }
+
+  async function uploadPlate(file: File): Promise<void> {
+    const labelDefault = file.name.replace(/\.[^.]+$/, "");
+    const label = prompt("Label for this plate:", labelDefault) ?? labelDefault;
+    const fd = new FormData();
+    fd.append("file", file);
+    fd.append("label", label);
+    try {
+      const r = await fetch(`${RENDER_SVC}/upload/plate`, { method: "POST", body: fd });
+      if (!r.ok) throw new Error(await r.text());
+      const newPlate = (await r.json()) as Plate;
+      await refreshPlates();
+      setSelectedPlate(newPlate.key);  // auto-select the new plate
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Plate upload failed");
+    }
+  }
+
+  async function deletePlate(plateKey: string) {
+    if (!plateKey.startsWith("custom_")) return;
+    const id = plateKey.slice("custom_".length);
+    if (!confirm("Delete this custom plate?")) return;
+    try {
+      const r = await fetch(`${RENDER_SVC}/upload/plate/${id}`, { method: "DELETE" });
+      if (!r.ok && r.status !== 204) throw new Error(`HTTP ${r.status}`);
+      const remaining = await refreshPlates();
+      // If we just deleted the selected plate, fall back to the default.
+      if (selectedPlate === plateKey && remaining.length > 0) {
+        setSelectedPlate(remaining[1]?.key ?? remaining[0].key);
+      }
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Delete failed");
+    }
+  }
+
+  async function uploadBannerImage(file: File): Promise<void> {
+    // Show a local preview immediately so the user gets feedback while the
+    // POST round-trips. Object URL gets revoked when the component
+    // unmounts or this same setter overwrites it on a follow-up upload.
+    setBannerImagePreview(URL.createObjectURL(file));
+    setBannerUploading(true);
+    const fd = new FormData();
+    fd.append("file", file);
+    try {
+      const r = await fetch(`${RENDER_SVC}/upload/banner`, { method: "POST", body: fd });
+      if (!r.ok) throw new Error(await r.text());
+      const data = (await r.json()) as { image_url: string };
+      setBannerImageUrl(data.image_url);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Banner upload failed");
+      setBannerImagePreview("");
+    } finally {
+      setBannerUploading(false);
+    }
+  }
+
+  function clearBannerImage() {
+    if (bannerImagePreview) URL.revokeObjectURL(bannerImagePreview);
+    setBannerImageUrl("");
+    setBannerImagePreview("");
+  }
 
   function applyCampaign(id: string) {
     if (!id) return;
@@ -520,13 +622,17 @@ export default function Home() {
         qr_caption: qrCaption.trim() || "Scan to connect",
         qr_disabled: qrDisabled,
       };
-      if (bannerEnabled && bannerEvent.trim()) {
+      if (bannerEnabled && (bannerEvent.trim() || bannerImageUrl)) {
         body.banner = {
-          event_name: bannerEvent.trim(),
+          // event_name is required by the BannerConfig schema even when an
+          // uploaded image takes over rendering — supply a placeholder
+          // when the user is in image-only mode and skipped the field.
+          event_name: bannerEvent.trim() || "(uploaded banner)",
           event_dates: bannerDates.trim(),
           event_location: bannerLocation.trim(),
           cta_text: bannerCtaText.trim() || "LET'S MEET",
           cta_url: bannerCtaUrl.trim(),
+          image_url: bannerImageUrl,
         };
       }
       const r = await fetch(`${RENDER_SVC}/generate`, {
@@ -595,6 +701,7 @@ export default function Home() {
           bannerLocation={bannerLocation}
           bannerCtaText={bannerCtaText}
           bannerCtaUrl={bannerCtaUrl}
+          bannerImageSrc={bannerImagePreview}
         />
       </section>
 
@@ -644,39 +751,68 @@ export default function Home() {
             <legend className="text-sm font-medium text-white/80">Background plate</legend>
             <p className="text-xs text-white/40">
               Static surface. Your logo + nametag overlay on top as an animated watermark.
+              Upload your own Zoom background — any PNG/JPG up to 10 MB.
             </p>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-5">
               {plates.map((p) => {
                 const selected = p.key === selectedPlate;
                 return (
-                  <button
-                    type="button"
-                    key={p.key}
-                    onClick={() => setSelectedPlate(p.key)}
-                    aria-pressed={selected}
-                    className={`group flex flex-col gap-1.5 rounded-lg border p-1.5 transition ${
-                      selected
-                        ? "border-[#055bfb] bg-[#055bfb]/10"
-                        : "border-white/15 hover:border-white/30"
-                    }`}
-                  >
-                    {/* Thumbnail: same CSS string the server uses for the
-                        actual render, applied to a 16:9 div. Aspect ratio
-                        matches the 1920×1080 output. */}
-                    <div
-                      style={{ ...parseInlineCss(p.css) }}
-                      className="aspect-video w-full rounded ring-1 ring-black/20"
-                    />
-                    <span
-                      className={`text-xs ${
-                        selected ? "text-white" : "text-white/70"
+                  <div key={p.key} className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedPlate(p.key)}
+                      aria-pressed={selected}
+                      className={`group flex w-full flex-col gap-1.5 rounded-lg border p-1.5 transition ${
+                        selected
+                          ? "border-[#055bfb] bg-[#055bfb]/10"
+                          : "border-white/15 hover:border-white/30"
                       }`}
                     >
-                      {p.label}
-                    </span>
-                  </button>
+                      <div
+                        style={{ ...parseInlineCss(p.css) }}
+                        className="aspect-video w-full rounded ring-1 ring-black/20"
+                      />
+                      <span
+                        className={`text-xs ${
+                          selected ? "text-white" : "text-white/70"
+                        }`}
+                      >
+                        {p.label}
+                      </span>
+                    </button>
+                    {p.is_custom && (
+                      <button
+                        type="button"
+                        title="Delete this custom plate"
+                        onClick={() => deletePlate(p.key)}
+                        className="absolute right-1 top-1 grid h-6 w-6 place-items-center rounded-full bg-black/70 text-xs text-white/80 opacity-0 transition hover:bg-red-600/80 hover:text-white group-hover:opacity-100 focus:opacity-100"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
                 );
               })}
+
+              {/* Upload tile — same dimensions as a plate card so it sits
+                  inline with the picker grid. Click triggers a hidden file
+                  input; selection auto-uploads + selects the new plate. */}
+              <label className="group flex cursor-pointer flex-col gap-1.5 rounded-lg border border-dashed border-white/25 p-1.5 transition hover:border-white/50">
+                <div className="flex aspect-video w-full items-center justify-center rounded ring-1 ring-black/20">
+                  <span className="text-2xl text-white/40 group-hover:text-white/70">+</span>
+                </div>
+                <span className="text-xs text-white/60">Upload your own</span>
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/gif"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) uploadPlate(f);
+                    e.target.value = "";  // allow re-uploading the same filename
+                  }}
+                />
+              </label>
             </div>
           </fieldset>
         )}
@@ -741,28 +877,91 @@ export default function Home() {
               </span>
             </span>
           </label>
-          {bannerEnabled && campaigns.length > 0 && (
-            <label className="grid gap-1">
-              <span className="text-xs font-medium text-white/70">
-                Use saved campaign{" "}
-                <span className="text-white/40">(or leave on Custom to type your own)</span>
-              </span>
-              <select
-                defaultValue=""
-                onChange={(e) => applyCampaign(e.target.value)}
-                className="rounded-lg border border-white/15 bg-black/30 px-3 py-2 text-sm outline-none focus:border-white/40"
-              >
-                <option value="">— Custom (type below) —</option>
-                {campaigns.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </label>
+          {bannerEnabled && (
+            <div className="grid gap-2">
+              {/* Upload pre-rendered banner — takes priority over the
+                  text-composed banner when set. Compose fields are
+                  visually de-emphasised but still kept around so the user
+                  can clear the upload and fall back to them. */}
+              <label className="grid gap-1">
+                <span className="text-xs font-medium text-white/70">
+                  Pre-made banner{" "}
+                  <span className="text-white/40">
+                    (PNG/JPG, ideally ~1600&times;280 or similar 5:1 ratio)
+                  </span>
+                </span>
+                {bannerImagePreview ? (
+                  <div className="flex items-center gap-3 rounded-lg border border-white/15 bg-black/30 p-2">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={bannerImagePreview}
+                      alt=""
+                      className="h-12 rounded ring-1 ring-black/20"
+                    />
+                    <div className="flex-1 text-xs text-white/70">
+                      {bannerUploading ? "Uploading…" : "Banner image uploaded. Compose fields below are ignored at render time."}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={clearBannerImage}
+                      className="rounded-md border border-white/20 px-2 py-1 text-xs text-white/80 hover:border-white/40"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ) : (
+                  <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-dashed border-white/25 bg-black/20 p-3 text-xs text-white/60 transition hover:border-white/50">
+                    <span className="grid h-9 w-9 place-items-center rounded-full bg-white/10 text-lg">↑</span>
+                    <span>Click to upload a banner image (or skip and compose below)</span>
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp"
+                      className="hidden"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f) uploadBannerImage(f);
+                        e.target.value = "";
+                      }}
+                    />
+                  </label>
+                )}
+              </label>
+
+              {campaigns.length > 0 && (
+                <label className="grid gap-1">
+                  <span className="text-xs font-medium text-white/70">
+                    Use saved campaign{" "}
+                    <span className="text-white/40">
+                      (or leave on Custom to type your own)
+                    </span>
+                  </span>
+                  <select
+                    defaultValue=""
+                    onChange={(e) => applyCampaign(e.target.value)}
+                    className="rounded-lg border border-white/15 bg-black/30 px-3 py-2 text-sm outline-none focus:border-white/40"
+                  >
+                    <option value="">— Custom (type below) —</option>
+                    {campaigns.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+            </div>
           )}
           {bannerEnabled && (
-            <div className="grid gap-2 rounded-lg border border-white/10 bg-white/[0.02] p-3 sm:grid-cols-2">
+            <div
+              className={`grid gap-2 rounded-lg border border-white/10 bg-white/[0.02] p-3 sm:grid-cols-2 ${
+                bannerImageUrl ? "opacity-40" : ""
+              }`}
+            >
+              {bannerImageUrl && (
+                <p className="text-xs text-amber-300/80 sm:col-span-2">
+                  An uploaded image is taking over the banner slot. These fields are inactive — clear the upload to use them.
+                </p>
+              )}
               <label className="grid gap-1 sm:col-span-2">
                 <span className="text-xs font-medium text-white/70">Event / message</span>
                 <input
