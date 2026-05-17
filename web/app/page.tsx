@@ -75,6 +75,8 @@ function BackgroundPreview({
   bannerCtaText,
   bannerCtaUrl,
   bannerImageSrc,
+  bannerWelcomeText,
+  showWelcomeState,
 }: {
   fullName: string;
   title: string;
@@ -89,6 +91,8 @@ function BackgroundPreview({
   bannerCtaText: string;
   bannerCtaUrl: string;
   bannerImageSrc: string;  // local object URL (preview) or server URL (after upload)
+  bannerWelcomeText: string;
+  showWelcomeState: boolean;  // toggle so the user can preview the rotating welcome layer
 }) {
   // Brand color falls back to WiseStamp blue when the live brand-scrape
   // hasn't completed yet — the preview still shows accurate LAYOUT even
@@ -284,7 +288,41 @@ function BackgroundPreview({
             />
           </div>
         )}
-        {showBanner && !bannerImageSrc && (
+        {showBanner && !bannerImageSrc && showWelcomeState && bannerWelcomeText.trim() && (
+          <div
+            className="absolute"
+            style={{
+              left: 160,
+              right: 160,
+              bottom: 50,
+              height: 280,
+              background: brandColor,
+              borderRadius: 16,
+              boxShadow: "0 20px 48px rgba(0,0,0,0.4)",
+              display: "grid",
+              gridTemplateColumns: "1fr",
+              justifyItems: "center",
+              alignItems: "center",
+              padding: "0 48px",
+              color: "#fff",
+              overflow: "hidden",
+            }}
+          >
+            <p
+              style={{
+                fontSize: 88,
+                fontWeight: 800,
+                letterSpacing: -1.5,
+                lineHeight: 1.0,
+                margin: 0,
+                textAlign: "center",
+              }}
+            >
+              {bannerWelcomeText}
+            </p>
+          </div>
+        )}
+        {showBanner && !bannerImageSrc && !(showWelcomeState && bannerWelcomeText.trim()) && (
           <div
             className="absolute"
             style={{
@@ -450,6 +488,11 @@ export default function Home() {
   const [bannerCtaText, setBannerCtaText] = useState("LET'S MEET");
   const [bannerCtaUrl, setBannerCtaUrl] = useState("");
 
+  // Rotating welcome message — when set, banner crossfades between its
+  // regular content and a centred welcome state on the master 10s loop.
+  // Empty string = no welcome layer, banner stays static.
+  const [bannerWelcomeText, setBannerWelcomeText] = useState("");
+
   // Pre-rendered banner image: when set, server skips the text-composition
   // path and renders this PNG/JPG at the banner slot instead. Cleared by
   // setting back to "" — the text fields are still around as a fallback.
@@ -461,6 +504,10 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<GenerateResponse | null>(null);
   const [brandPreview, setBrandPreview] = useState<BrandPreviewData | null>(null);
+
+  // Live preview toggles: lets the user flip between banner states
+  // statically before committing to a 15-second render.
+  const [showWelcomeStateInPreview, setShowWelcomeStateInPreview] = useState(false);
 
   // Campaign library — populated once at mount; the banner section uses it
   // to offer a "Use saved campaign" dropdown that pre-fills the fields.
@@ -633,6 +680,7 @@ export default function Home() {
           cta_text: bannerCtaText.trim() || "LET'S MEET",
           cta_url: bannerCtaUrl.trim(),
           image_url: bannerImageUrl,
+          welcome_text: bannerWelcomeText.trim(),
         };
       }
       const r = await fetch(`${RENDER_SVC}/generate`, {
@@ -680,13 +728,25 @@ export default function Home() {
       </header>
 
       <section className="mb-6 grid gap-2">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-3">
           <p className="text-sm font-medium text-white/80">Live preview</p>
-          <p className="text-xs text-white/40">
-            {brandPreview
-              ? `${brandPreview.company_name} · ${brandPreview.brand_color}`
-              : "Type a company URL to load real brand colors"}
-          </p>
+          <div className="flex items-center gap-3">
+            {bannerEnabled && bannerWelcomeText.trim() && !bannerImagePreview && (
+              <button
+                type="button"
+                onClick={() => setShowWelcomeStateInPreview((v) => !v)}
+                className="rounded-md border border-white/20 px-2 py-1 text-xs text-white/80 hover:border-white/40"
+                title="The actual render crossfades between these states every 5s"
+              >
+                {showWelcomeStateInPreview ? "Show banner state" : "Show welcome state"}
+              </button>
+            )}
+            <p className="text-xs text-white/40">
+              {brandPreview
+                ? `${brandPreview.company_name} · ${brandPreview.brand_color}`
+                : "Type a company URL to load real brand colors"}
+            </p>
+          </div>
         </div>
         <BackgroundPreview
           fullName={fullName}
@@ -702,6 +762,8 @@ export default function Home() {
           bannerCtaText={bannerCtaText}
           bannerCtaUrl={bannerCtaUrl}
           bannerImageSrc={bannerImagePreview}
+          bannerWelcomeText={bannerWelcomeText}
+          showWelcomeState={showWelcomeStateInPreview}
         />
       </section>
 
@@ -1005,6 +1067,21 @@ export default function Home() {
                   value={bannerCtaUrl}
                   onChange={(e) => setBannerCtaUrl(e.target.value)}
                   placeholder="https://calendly.com/you/intro"
+                  className="rounded-lg border border-white/15 bg-black/30 px-3 py-2 text-sm outline-none focus:border-white/40"
+                />
+              </label>
+              <label className="grid gap-1 sm:col-span-2">
+                <span className="text-xs font-medium text-white/70">
+                  Welcome message{" "}
+                  <span className="text-white/40">
+                    (optional &mdash; banner crossfades between this and the event content every ~5s)
+                  </span>
+                </span>
+                <input
+                  value={bannerWelcomeText}
+                  onChange={(e) => setBannerWelcomeText(e.target.value)}
+                  placeholder="Welcome, Acme team! 👋"
+                  maxLength={80}
                   className="rounded-lg border border-white/15 bg-black/30 px-3 py-2 text-sm outline-none focus:border-white/40"
                 />
               </label>

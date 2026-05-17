@@ -337,6 +337,58 @@
       object-fit: cover;
       display: block;
     }
+
+    /* Rotating welcome message — stacked absolute layers inside the banner
+       so they share the same brand-color background and drop shadow but
+       crossfade independently. Total cycle is 10s to match the master loop;
+       both keyframes have matching 0% and 100% values for seamless looping. */
+    .banner.banner-with-welcome {
+      /* When the welcome layer is present, the wrapper itself doesn't lay
+         out its children with grid — each layer is absolutely positioned
+         and grid-laid-out internally. */
+      display: block;
+      padding: 0;
+    }
+    .banner-layer {
+      position: absolute;
+      inset: 0;
+      padding: 0 48px;
+      display: grid;
+      align-items: center;
+    }
+    .banner-layer.regular-layer {
+      grid-template-columns: 1fr 480px;
+      animation: bannerRegularCycle 10s ease-in-out infinite;
+    }
+    .banner-layer.welcome-layer {
+      grid-template-columns: 1fr;
+      justify-items: center;
+      animation: bannerWelcomeCycle 10s ease-in-out infinite;
+    }
+    @keyframes bannerRegularCycle {
+      0%, 40%, 100% { opacity: 1; }
+      50%, 90%      { opacity: 0; }
+    }
+    @keyframes bannerWelcomeCycle {
+      0%, 40%, 100% { opacity: 0; }
+      50%, 90%      { opacity: 1; }
+    }
+
+    .welcome-text {
+      font-size: 88px;
+      font-weight: 800;
+      letter-spacing: -1.5px;
+      line-height: 1.0;
+      margin: 0;
+      text-align: center;
+      color: #fff;
+      /* Two-line clamp so over-long welcome strings degrade gracefully
+         instead of overflowing the banner height. */
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
   </style>
 </head>
 <body>
@@ -373,6 +425,35 @@
          into the same spot as the text banner. #}
       <div class="banner banner-image-only">
         <img src="{{ banner_image_data_uri }}" alt="">
+      </div>
+    {% elif banner.welcome_text %}
+      {# Text banner WITH rotating welcome message. Two absolutely-stacked
+         layers crossfade on the master 10s loop. #}
+      <div class="banner banner-with-welcome">
+        <div class="banner-layer regular-layer">
+          <div class="left">
+            <p class="eyebrow">{{ banner.eyebrow }}</p>
+            <p class="event">{{ banner.event_name }}</p>
+          </div>
+          <div class="right">
+            {% if banner.event_dates or banner.event_location %}
+            <p class="date-place">
+              {% if banner.event_dates %}{{ banner.event_dates }}{% endif %}
+              {% if banner.event_dates and banner.event_location %}<br>{% endif %}
+              {% if banner.event_location %}{{ banner.event_location }}{% endif %}
+            </p>
+            {% endif %}
+            <div class="right-row">
+              {% if banner_qr_data_uri %}
+              <div class="banner-qr"><img src="{{ banner_qr_data_uri }}" alt="QR code"></div>
+              {% endif %}
+              <span class="cta-pill">{{ banner.cta_text }}</span>
+            </div>
+          </div>
+        </div>
+        <div class="banner-layer welcome-layer">
+          <p class="welcome-text">{{ banner.welcome_text }}</p>
+        </div>
       </div>
     {% else %}
       <div class="banner">

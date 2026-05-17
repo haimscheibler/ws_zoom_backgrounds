@@ -28,6 +28,11 @@ class BannerConfig(BaseModel):
     cta_text: str = Field(default="LET'S MEET", max_length=20)
     cta_url: str = Field(default="", max_length=400)
     image_url: str = Field(default="", max_length=400)  # /uploads/banners/X.ext when uploaded
+    # Optional rotating welcome message. When set, the banner crossfades
+    # between its regular content (event + CTA) and a centred welcome
+    # state on the master 10s loop — 4s regular, 1s fade, 4s welcome,
+    # 1s fade back. When blank, banner is static (existing behaviour).
+    welcome_text: str = Field(default="", max_length=80)
 
 
 class Campaign(BaseModel):
