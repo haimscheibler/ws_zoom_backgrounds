@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import { SiteHeader } from "../_components/SiteHeader";
 
 const RENDER_SVC = process.env.NEXT_PUBLIC_RENDER_SVC ?? "http://localhost:8080";
 
@@ -258,45 +259,45 @@ export default function MeetingsPage() {
 
   return (
     <main className="mx-auto flex min-h-screen max-w-5xl flex-col px-6 py-12">
-      <header className="mb-6 flex items-center justify-between gap-4">
-        <div>
-          <p className="text-xs uppercase tracking-wider text-white/40">
-            <Link href="/" className="hover:text-white/60">← Back to generator</Link>
-          </p>
-          <h1 className="mt-2 text-3xl font-bold tracking-tight">
-            Meetings today
-          </h1>
-          <p className="mt-2 text-white/60">
-            Each meeting auto-renders a personalised background using
-            the attendees&apos; companies. Click <strong>Prepare background</strong>{" "}
-            to render now; on a real deployment the calendar trigger would
-            do this 5 min before each meeting.
-          </p>
-        </div>
-        <div className="flex flex-col items-end gap-2">
-          <button
-            type="button"
-            onClick={seedDemo}
-            className="rounded-lg border border-white/15 px-3 py-1.5 text-sm hover:border-white/30"
-            title="Replace the meeting list with a fresh batch of demo meetings centred on now"
-          >
-            Reset demo data
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowAddForm((v) => !v)}
-            className="rounded-lg bg-[#055bfb] px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-[#0468ff]"
-          >
-            {showAddForm ? "Cancel" : "+ Add meeting"}
-          </button>
-        </div>
-      </header>
+      <SiteHeader
+        pageBadge="Meetings"
+        rightSlot={
+          <>
+            <button
+              type="button"
+              onClick={seedDemo}
+              className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-700 hover:border-slate-400"
+              title="Replace the meeting list with a fresh batch of demo meetings centred on now"
+            >
+              Reset demo data
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowAddForm((v) => !v)}
+              className="rounded-lg bg-[#055bfb] px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-[#0468ff]"
+            >
+              {showAddForm ? "Cancel" : "+ Add meeting"}
+            </button>
+          </>
+        }
+      />
+      <section className="mb-6">
+        <h1 className="text-3xl font-bold tracking-tight text-slate-900">
+          Meetings today
+        </h1>
+        <p className="mt-2 max-w-2xl text-slate-500">
+          Each meeting auto-renders a personalised background using
+          the attendees&apos; companies. Click <strong>Prepare background</strong>{" "}
+          to render now; on a real deployment the calendar trigger would
+          do this 5 min before each meeting.
+        </p>
+      </section>
 
       {/* AE profile — pinned at the top, persisted in localStorage. Every
           meeting render uses this as the "you" context. */}
-      <section className="mb-6 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-        <p className="mb-2 text-sm font-medium text-white/80">Your profile</p>
-        <p className="mb-3 text-xs text-white/40">
+      <section className="mb-6 rounded-2xl border border-slate-200 bg-white shadow-sm p-4">
+        <p className="mb-2 text-sm font-medium text-slate-700">Your profile</p>
+        <p className="mb-3 text-xs text-slate-400">
           Used as the AE&apos;s name + branding in every meeting render. Saved in your browser only.
         </p>
         <div className="grid gap-2 sm:grid-cols-4">
@@ -304,50 +305,50 @@ export default function MeetingsPage() {
             value={ae.full_name}
             onChange={(e) => setAe({ ...ae, full_name: e.target.value })}
             placeholder="Your full name"
-            className="rounded-lg border border-white/15 bg-black/30 px-3 py-2 text-sm outline-none focus:border-white/40"
+            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#055bfb]"
           />
           <input
             value={ae.title}
             onChange={(e) => setAe({ ...ae, title: e.target.value })}
             placeholder="Your title"
-            className="rounded-lg border border-white/15 bg-black/30 px-3 py-2 text-sm outline-none focus:border-white/40"
+            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#055bfb]"
           />
           <input
             value={ae.company_url}
             onChange={(e) => setAe({ ...ae, company_url: e.target.value })}
             placeholder="yourcompany.com"
-            className="rounded-lg border border-white/15 bg-black/30 px-3 py-2 text-sm outline-none focus:border-white/40"
+            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#055bfb]"
           />
           <input
             value={ae.qr_url}
             onChange={(e) => setAe({ ...ae, qr_url: e.target.value })}
             placeholder="Your LinkedIn / Calendly URL"
-            className="rounded-lg border border-white/15 bg-black/30 px-3 py-2 text-sm outline-none focus:border-white/40"
+            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#055bfb]"
           />
         </div>
       </section>
 
       {/* Inline create form */}
       {showAddForm && (
-        <section className="mb-6 grid gap-3 rounded-2xl border border-white/15 bg-white/[0.03] p-4">
+        <section className="mb-6 grid gap-3 rounded-2xl border border-slate-200 bg-white shadow-sm p-4">
           <input
             value={newTitle}
             onChange={(e) => setNewTitle(e.target.value)}
             placeholder="Meeting title — e.g., Acme Corp / WiseStamp intro"
-            className="rounded-lg border border-white/15 bg-black/30 px-3 py-2 text-sm outline-none focus:border-white/40"
+            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#055bfb]"
           />
           <div className="grid gap-2 sm:grid-cols-2">
             <label className="grid gap-1">
-              <span className="text-xs text-white/60">Start time</span>
+              <span className="text-xs text-slate-500">Start time</span>
               <input
                 type="datetime-local"
                 value={newStart}
                 onChange={(e) => setNewStart(e.target.value)}
-                className="rounded-lg border border-white/15 bg-black/30 px-3 py-2 text-sm outline-none focus:border-white/40"
+                className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#055bfb]"
               />
             </label>
             <label className="grid gap-1">
-              <span className="text-xs text-white/60">Duration (minutes)</span>
+              <span className="text-xs text-slate-500">Duration (minutes)</span>
               <input
                 type="number"
                 min={5}
@@ -355,16 +356,16 @@ export default function MeetingsPage() {
                 step={5}
                 value={newDuration}
                 onChange={(e) => setNewDuration(Number(e.target.value))}
-                className="rounded-lg border border-white/15 bg-black/30 px-3 py-2 text-sm outline-none focus:border-white/40"
+                className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#055bfb]"
               />
             </label>
           </div>
           <label className="grid gap-1">
-            <span className="text-xs text-white/60">
+            <span className="text-xs text-slate-500">
               Attendees{" "}
-              <span className="text-white/40">
+              <span className="text-slate-400">
                 — comma- or newline-separated. Use{" "}
-                <code className="text-white/60">Name &lt;email@domain&gt;</code>{" "}
+                <code className="text-slate-500">Name &lt;email@domain&gt;</code>{" "}
                 or just the email.
               </span>
             </span>
@@ -372,13 +373,13 @@ export default function MeetingsPage() {
               value={newAttendeesRaw}
               onChange={(e) => setNewAttendeesRaw(e.target.value)}
               placeholder={"Patrick Collison <patrick@stripe.com>\njohn@stripe.com"}
-              className="min-h-[80px] rounded-lg border border-white/15 bg-black/30 px-3 py-2 text-sm outline-none focus:border-white/40"
+              className="min-h-[80px] rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#055bfb]"
             />
           </label>
           <label className="grid gap-1">
-            <span className="text-xs text-white/60">
+            <span className="text-xs text-slate-500">
               Welcome template{" "}
-              <span className="text-white/40">
+              <span className="text-slate-400">
                 — <code>{"{company}"}</code> is replaced with the resolved attendee company
               </span>
             </span>
@@ -386,14 +387,14 @@ export default function MeetingsPage() {
               value={newWelcome}
               onChange={(e) => setNewWelcome(e.target.value)}
               placeholder="Welcome, {company} team! 👋"
-              className="rounded-lg border border-white/15 bg-black/30 px-3 py-2 text-sm outline-none focus:border-white/40"
+              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#055bfb]"
             />
           </label>
           <div className="flex justify-end gap-2">
             <button
               type="button"
               onClick={() => setShowAddForm(false)}
-              className="rounded-lg border border-white/15 px-3 py-1.5 text-sm hover:border-white/30"
+              className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm hover:border-slate-400"
             >
               Cancel
             </button>
@@ -410,17 +411,17 @@ export default function MeetingsPage() {
       )}
 
       {error && (
-        <p className="mb-4 rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-300">
+        <p className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
           {error}
         </p>
       )}
 
-      {loading && <p className="text-white/50">Loading…</p>}
+      {loading && <p className="text-slate-500">Loading…</p>}
 
       {!loading && meetings.length === 0 && (
-        <div className="rounded-2xl border border-dashed border-white/15 bg-white/[0.02] p-8 text-center">
-          <p className="text-white/70">No meetings yet.</p>
-          <p className="mt-1 text-sm text-white/40">
+        <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-8 text-center">
+          <p className="text-slate-600">No meetings yet.</p>
+          <p className="mt-1 text-sm text-slate-400">
             Click <strong>Reset demo data</strong> to seed a few example meetings
             against real companies, or <strong>Add meeting</strong> to create one
             yourself.
@@ -439,26 +440,26 @@ export default function MeetingsPage() {
           return (
             <li
               key={m.id}
-              className={`relative rounded-xl border bg-white/[0.03] p-5 ${
+              className={`relative rounded-xl border bg-white shadow-sm p-5 ${
                 isNext
                   ? "border-[#055bfb] shadow-[0_0_0_1px_rgba(5,91,251,0.45)]"
                   : isPast
-                    ? "border-white/10 opacity-60"
-                    : "border-white/15"
+                    ? "border-slate-200 opacity-60"
+                    : "border-slate-200"
               }`}
             >
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="flex-1">
                   {isNext && (
-                    <p className="mb-1 inline-flex items-center gap-1.5 rounded-full bg-[#055bfb]/20 px-2 py-0.5 text-xs font-semibold uppercase tracking-wider text-[#7ea4ff]">
-                      <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-[#7ea4ff]" />
+                    <p className="mb-1 inline-flex items-center gap-1.5 rounded-full bg-[#055bfb]/10 px-2 py-0.5 text-xs font-semibold uppercase tracking-wider text-[#055bfb]">
+                      <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-[#055bfb]" />
                       Next up
                     </p>
                   )}
                   <h3 className="text-lg font-semibold">{m.title}</h3>
-                  <p className={`mt-0.5 text-sm ${rel.bucket === "active" ? "text-emerald-300" : "text-white/60"}`}>
+                  <p className={`mt-0.5 text-sm ${rel.bucket === "active" ? "text-emerald-300" : "text-slate-500"}`}>
                     {rel.text}{" "}
-                    <span className="text-white/40">· {m.duration_minutes} min</span>
+                    <span className="text-slate-400">· {m.duration_minutes} min</span>
                   </p>
 
                   {m.attendees.length > 0 && (
@@ -466,28 +467,28 @@ export default function MeetingsPage() {
                       {m.attendees.map((a, idx) => (
                         <li
                           key={`${m.id}-${idx}`}
-                          className="flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.05] px-2 py-1 text-xs"
+                          className="flex items-center gap-2 rounded-full border border-slate-200 bg-slate-100 px-2 py-1 text-xs"
                           title={a.email}
                         >
                           <span className="grid h-5 w-5 place-items-center rounded-full bg-[#055bfb]/30 text-[10px] font-semibold">
                             {attendeeInitials(a)}
                           </span>
-                          <span className="text-white/85">
+                          <span className="text-slate-800">
                             {a.name || a.email.split("@")[0]}
                           </span>
-                          <span className="text-white/40">@{attendeeDomain(a)}</span>
+                          <span className="text-slate-400">@{attendeeDomain(a)}</span>
                         </li>
                       ))}
                     </ul>
                   )}
 
                   {m.primary_company_name && (
-                    <p className="mt-2 text-xs text-white/50">
-                      Auto-detected company → <strong className="text-white/80">{m.primary_company_name}</strong>
+                    <p className="mt-2 text-xs text-slate-500">
+                      Auto-detected company → <strong className="text-slate-700">{m.primary_company_name}</strong>
                     </p>
                   )}
                   {m.last_render_error && (
-                    <p className="mt-2 text-xs text-red-300/90">
+                    <p className="mt-2 text-xs text-red-700">
                       {m.last_render_error}
                     </p>
                   )}
@@ -499,14 +500,14 @@ export default function MeetingsPage() {
                       <a
                         href={absolutise(m.rendered_mp4_url)}
                         download={`${m.title.replace(/[^a-z0-9]+/gi, "_")}.mp4`}
-                        className="rounded-lg bg-white px-4 py-2 text-sm font-semibold text-[#0a1626] hover:bg-white/90"
+                        className="rounded-lg bg-white px-4 py-2 text-sm font-semibold text-[#0a1626] hover:bg-slate-100"
                       >
                         Download MP4
                       </a>
                       <button
                         type="button"
                         onClick={() => renderMeeting(m)}
-                        className="text-xs text-white/50 hover:text-white/80"
+                        className="text-xs text-slate-500 hover:text-slate-700"
                       >
                         Re-render
                       </button>
@@ -524,7 +525,7 @@ export default function MeetingsPage() {
                   <button
                     type="button"
                     onClick={() => deleteMeeting(m)}
-                    className="text-xs text-white/40 hover:text-red-300"
+                    className="text-xs text-slate-400 hover:text-red-700"
                   >
                     Delete
                   </button>
@@ -532,7 +533,7 @@ export default function MeetingsPage() {
               </div>
 
               {isReady && m.rendered_poster_url && (
-                <div className="mt-4 overflow-hidden rounded-lg border border-white/10">
+                <div className="mt-4 overflow-hidden rounded-lg border border-slate-200">
                   <video
                     src={absolutise(m.rendered_mp4_url)}
                     poster={absolutise(m.rendered_poster_url)}

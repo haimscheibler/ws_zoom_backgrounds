@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { SiteHeader } from "./_components/SiteHeader";
 
 const RENDER_SVC = process.env.NEXT_PUBLIC_RENDER_SVC ?? "http://localhost:8080";
 
@@ -128,7 +129,7 @@ function BackgroundPreview({
   return (
     <div
       ref={wrapperRef}
-      className="relative aspect-video w-full overflow-hidden rounded-xl border border-white/15 bg-black"
+      className="relative aspect-video w-full overflow-hidden rounded-xl border border-slate-200 bg-black"
     >
       <div
         className="absolute left-0 top-0 origin-top-left"
@@ -706,50 +707,50 @@ export default function Home() {
 
   return (
     <main className="mx-auto flex min-h-screen max-w-5xl flex-col px-6 py-12">
-      <header className="mb-10 flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">
-            Interactive Meeting Backgrounds
-            <span className="ml-2 rounded bg-white/10 px-2 py-0.5 text-xs font-medium uppercase text-white/70">
-              MVP
-            </span>
-          </h1>
-          <p className="mt-2 text-white/60">
-            Drop your name, title, and company URL — get an animated, brand-personalised
-            1920×1080 MP4 you can drop straight into Zoom.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Link
-            href="/meetings"
-            className="rounded-lg border border-white/15 px-3 py-1.5 text-sm text-white/80 transition hover:border-white/30 hover:text-white"
-          >
-            Meetings today →
-          </Link>
-          <Link
-            href="/campaigns"
-            className="rounded-lg border border-white/15 px-3 py-1.5 text-sm text-white/80 transition hover:border-white/30 hover:text-white"
-          >
-            Manage campaigns →
-          </Link>
-        </div>
-      </header>
+      <SiteHeader
+        pageBadge="Backgrounds Studio"
+        rightSlot={
+          <>
+            <Link
+              href="/meetings"
+              className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-700 transition hover:border-[#055bfb]/40 hover:text-[#055bfb]"
+            >
+              Meetings today →
+            </Link>
+            <Link
+              href="/campaigns"
+              className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-700 transition hover:border-[#055bfb]/40 hover:text-[#055bfb]"
+            >
+              Manage campaigns →
+            </Link>
+          </>
+        }
+      />
+      <section className="mb-8">
+        <h1 className="text-3xl font-bold tracking-tight text-slate-900">
+          Animated backgrounds for every meeting.
+        </h1>
+        <p className="mt-2 max-w-2xl text-slate-500">
+          Drop your name, title, and company URL — get an animated, brand-personalised
+          1920×1080 MP4 you can drop straight into Zoom, Teams, or Meet.
+        </p>
+      </section>
 
       <section className="mb-6 grid gap-2">
         <div className="flex items-center justify-between gap-3">
-          <p className="text-sm font-medium text-white/80">Live preview</p>
+          <p className="text-sm font-medium text-slate-700">Live preview</p>
           <div className="flex items-center gap-3">
             {bannerEnabled && bannerWelcomeText.trim() && !bannerImagePreview && (
               <button
                 type="button"
                 onClick={() => setShowWelcomeStateInPreview((v) => !v)}
-                className="rounded-md border border-white/20 px-2 py-1 text-xs text-white/80 hover:border-white/40"
+                className="rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-700 hover:border-slate-500"
                 title="The actual render crossfades between these states every 5s"
               >
                 {showWelcomeStateInPreview ? "Show banner state" : "Show welcome state"}
               </button>
             )}
-            <p className="text-xs text-white/40">
+            <p className="text-xs text-slate-400">
               {brandPreview
                 ? `${brandPreview.company_name} · ${brandPreview.brand_color}`
                 : "Type a company URL to load real brand colors"}
@@ -777,49 +778,49 @@ export default function Home() {
 
       <form
         onSubmit={onSubmit}
-        className="grid gap-4 rounded-2xl border border-white/10 bg-white/[0.03] p-6"
+        className="grid gap-4 rounded-2xl border border-slate-200 bg-white shadow-sm p-6"
       >
         <label className="grid gap-1.5">
-          <span className="text-sm font-medium text-white/80">Full name</span>
+          <span className="text-sm font-medium text-slate-700">Full name</span>
           <input
             required
             value={fullName}
             onChange={(e) => setFullName(e.target.value)}
             placeholder="Jane Cooper"
-            className="rounded-lg border border-white/15 bg-black/30 px-3 py-2 outline-none focus:border-white/40"
+            className="rounded-lg border border-slate-200 bg-white px-3 py-2 outline-none focus:border-[#055bfb]"
           />
         </label>
 
         <label className="grid gap-1.5">
-          <span className="text-sm font-medium text-white/80">
-            Title <span className="text-white/40">(optional)</span>
+          <span className="text-sm font-medium text-slate-700">
+            Title <span className="text-slate-400">(optional)</span>
           </span>
           <input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="Head of Marketing"
-            className="rounded-lg border border-white/15 bg-black/30 px-3 py-2 outline-none focus:border-white/40"
+            className="rounded-lg border border-slate-200 bg-white px-3 py-2 outline-none focus:border-[#055bfb]"
           />
         </label>
 
         <label className="grid gap-1.5">
-          <span className="text-sm font-medium text-white/80">Company URL</span>
+          <span className="text-sm font-medium text-slate-700">Company URL</span>
           <input
             required
             value={companyUrl}
             onChange={(e) => setCompanyUrl(e.target.value)}
             placeholder="wisestamp.com"
-            className="rounded-lg border border-white/15 bg-black/30 px-3 py-2 outline-none focus:border-white/40"
+            className="rounded-lg border border-slate-200 bg-white px-3 py-2 outline-none focus:border-[#055bfb]"
           />
-          <span className="text-xs text-white/40">
+          <span className="text-xs text-slate-400">
             We scrape the homepage for the company logo and dominant brand color.
           </span>
         </label>
 
         {plates.length > 0 && (
           <fieldset className="grid gap-2">
-            <legend className="text-sm font-medium text-white/80">Background plate</legend>
-            <p className="text-xs text-white/40">
+            <legend className="text-sm font-medium text-slate-700">Background plate</legend>
+            <p className="text-xs text-slate-400">
               Static surface. Your logo + nametag overlay on top as an animated watermark.
               Upload your own Zoom background — any PNG/JPG up to 10 MB.
             </p>
@@ -835,7 +836,7 @@ export default function Home() {
                       className={`group flex w-full flex-col gap-1.5 rounded-lg border p-1.5 transition ${
                         selected
                           ? "border-[#055bfb] bg-[#055bfb]/10"
-                          : "border-white/15 hover:border-white/30"
+                          : "border-slate-200 hover:border-slate-400"
                       }`}
                     >
                       <div
@@ -844,7 +845,7 @@ export default function Home() {
                       />
                       <span
                         className={`text-xs ${
-                          selected ? "text-white" : "text-white/70"
+                          selected ? "text-white" : "text-slate-600"
                         }`}
                       >
                         {p.label}
@@ -855,7 +856,7 @@ export default function Home() {
                         type="button"
                         title="Delete this custom plate"
                         onClick={() => deletePlate(p.key)}
-                        className="absolute right-1 top-1 grid h-6 w-6 place-items-center rounded-full bg-black/70 text-xs text-white/80 opacity-0 transition hover:bg-red-600/80 hover:text-white group-hover:opacity-100 focus:opacity-100"
+                        className="absolute right-1 top-1 grid h-6 w-6 place-items-center rounded-full bg-black/70 text-xs text-slate-700 opacity-0 transition hover:bg-red-600/80 hover:text-slate-900 group-hover:opacity-100 focus:opacity-100"
                       >
                         ✕
                       </button>
@@ -867,11 +868,11 @@ export default function Home() {
               {/* Upload tile — same dimensions as a plate card so it sits
                   inline with the picker grid. Click triggers a hidden file
                   input; selection auto-uploads + selects the new plate. */}
-              <label className="group flex cursor-pointer flex-col gap-1.5 rounded-lg border border-dashed border-white/25 p-1.5 transition hover:border-white/50">
+              <label className="group flex cursor-pointer flex-col gap-1.5 rounded-lg border border-dashed border-slate-300 p-1.5 transition hover:border-slate-500">
                 <div className="flex aspect-video w-full items-center justify-center rounded ring-1 ring-black/20">
-                  <span className="text-2xl text-white/40 group-hover:text-white/70">+</span>
+                  <span className="text-2xl text-slate-400 group-hover:text-slate-600">+</span>
                 </div>
-                <span className="text-xs text-white/60">Upload your own</span>
+                <span className="text-xs text-slate-500">Upload your own</span>
                 <input
                   type="file"
                   accept="image/png,image/jpeg,image/webp,image/gif"
@@ -890,8 +891,8 @@ export default function Home() {
         {/* QR code panel — default-on with Apollo-LinkedIn auto-fill.
             Compact (one row of inputs) when enabled, hidden when disabled. */}
         <fieldset className="grid gap-2">
-          <legend className="text-sm font-medium text-white/80">QR code</legend>
-          <label className="flex items-center gap-2 text-sm text-white/70">
+          <legend className="text-sm font-medium text-slate-700">QR code</legend>
+          <label className="flex items-center gap-2 text-sm text-slate-600">
             <input
               type="checkbox"
               checked={!qrDisabled}
@@ -900,7 +901,7 @@ export default function Home() {
             />
             <span>
               Show QR code{" "}
-              <span className="text-white/40">
+              <span className="text-slate-400">
                 (auto-fills to person&rsquo;s LinkedIn from Apollo if URL is blank)
               </span>
             </span>
@@ -911,19 +912,19 @@ export default function Home() {
                 value={qrUrl}
                 onChange={(e) => setQrUrl(e.target.value)}
                 placeholder="https://calendly.com/you/intro (or leave blank for LinkedIn)"
-                className="rounded-lg border border-white/15 bg-black/30 px-3 py-2 text-sm outline-none focus:border-white/40"
+                className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#055bfb]"
               />
               <input
                 value={qrCaption}
                 onChange={(e) => setQrCaption(e.target.value)}
                 placeholder="Caption"
                 maxLength={40}
-                className="rounded-lg border border-white/15 bg-black/30 px-3 py-2 text-sm outline-none focus:border-white/40"
+                className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#055bfb]"
               />
             </div>
           )}
           {!qrDisabled && bannerEnabled && (
-            <p className="text-xs text-white/40">
+            <p className="text-xs text-slate-400">
               Standalone QR is hidden when the banner is on &mdash; the banner carries
               its own CTA QR. Edit the banner&rsquo;s CTA URL instead.
             </p>
@@ -932,8 +933,8 @@ export default function Home() {
 
         {/* Banner panel — opt-in. Whole block collapsed until enabled. */}
         <fieldset className="grid gap-2">
-          <legend className="text-sm font-medium text-white/80">Banner</legend>
-          <label className="flex items-center gap-2 text-sm text-white/70">
+          <legend className="text-sm font-medium text-slate-700">Banner</legend>
+          <label className="flex items-center gap-2 text-sm text-slate-600">
             <input
               type="checkbox"
               checked={bannerEnabled}
@@ -942,7 +943,7 @@ export default function Home() {
             />
             <span>
               Add a promotional banner along the bottom edge{" "}
-              <span className="text-white/40">
+              <span className="text-slate-400">
                 (event push, hiring, campaign &mdash; like the WiseStamp email banner)
               </span>
             </span>
@@ -954,34 +955,34 @@ export default function Home() {
                   visually de-emphasised but still kept around so the user
                   can clear the upload and fall back to them. */}
               <label className="grid gap-1">
-                <span className="text-xs font-medium text-white/70">
+                <span className="text-xs font-medium text-slate-600">
                   Pre-made banner{" "}
-                  <span className="text-white/40">
+                  <span className="text-slate-400">
                     (PNG/JPG, ideally ~1600&times;280 or similar 5:1 ratio)
                   </span>
                 </span>
                 {bannerImagePreview ? (
-                  <div className="flex items-center gap-3 rounded-lg border border-white/15 bg-black/30 p-2">
+                  <div className="flex items-center gap-3 rounded-lg border border-slate-200 bg-white p-2">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={bannerImagePreview}
                       alt=""
                       className="h-12 rounded ring-1 ring-black/20"
                     />
-                    <div className="flex-1 text-xs text-white/70">
+                    <div className="flex-1 text-xs text-slate-600">
                       {bannerUploading ? "Uploading…" : "Banner image uploaded. Compose fields below are ignored at render time."}
                     </div>
                     <button
                       type="button"
                       onClick={clearBannerImage}
-                      className="rounded-md border border-white/20 px-2 py-1 text-xs text-white/80 hover:border-white/40"
+                      className="rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-700 hover:border-slate-500"
                     >
                       Remove
                     </button>
                   </div>
                 ) : (
-                  <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-dashed border-white/25 bg-black/20 p-3 text-xs text-white/60 transition hover:border-white/50">
-                    <span className="grid h-9 w-9 place-items-center rounded-full bg-white/10 text-lg">↑</span>
+                  <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-3 text-xs text-slate-500 transition hover:border-slate-500">
+                    <span className="grid h-9 w-9 place-items-center rounded-full bg-slate-200 text-lg">↑</span>
                     <span>Click to upload a banner image (or skip and compose below)</span>
                     <input
                       type="file"
@@ -999,16 +1000,16 @@ export default function Home() {
 
               {campaigns.length > 0 && (
                 <label className="grid gap-1">
-                  <span className="text-xs font-medium text-white/70">
+                  <span className="text-xs font-medium text-slate-600">
                     Use saved campaign{" "}
-                    <span className="text-white/40">
+                    <span className="text-slate-400">
                       (or leave on Custom to type your own)
                     </span>
                   </span>
                   <select
                     defaultValue=""
                     onChange={(e) => applyCampaign(e.target.value)}
-                    className="rounded-lg border border-white/15 bg-black/30 px-3 py-2 text-sm outline-none focus:border-white/40"
+                    className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#055bfb]"
                   >
                     <option value="">— Custom (type below) —</option>
                     {campaigns.map((c) => (
@@ -1023,65 +1024,65 @@ export default function Home() {
           )}
           {bannerEnabled && (
             <div
-              className={`grid gap-2 rounded-lg border border-white/10 bg-white/[0.02] p-3 sm:grid-cols-2 ${
+              className={`grid gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 sm:grid-cols-2 ${
                 bannerImageUrl ? "opacity-40" : ""
               }`}
             >
               {bannerImageUrl && (
-                <p className="text-xs text-amber-300/80 sm:col-span-2">
+                <p className="text-xs text-amber-700 sm:col-span-2">
                   An uploaded image is taking over the banner slot. These fields are inactive — clear the upload to use them.
                 </p>
               )}
               <label className="grid gap-1 sm:col-span-2">
-                <span className="text-xs font-medium text-white/70">Event / message</span>
+                <span className="text-xs font-medium text-slate-600">Event / message</span>
                 <input
                   value={bannerEvent}
                   onChange={(e) => setBannerEvent(e.target.value)}
                   placeholder="Gartner Marketing Symposium"
-                  className="rounded-lg border border-white/15 bg-black/30 px-3 py-2 text-sm outline-none focus:border-white/40"
+                  className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#055bfb]"
                 />
               </label>
               <label className="grid gap-1">
-                <span className="text-xs font-medium text-white/70">Dates</span>
+                <span className="text-xs font-medium text-slate-600">Dates</span>
                 <input
                   value={bannerDates}
                   onChange={(e) => setBannerDates(e.target.value)}
                   placeholder="June 8–10, 2026"
-                  className="rounded-lg border border-white/15 bg-black/30 px-3 py-2 text-sm outline-none focus:border-white/40"
+                  className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#055bfb]"
                 />
               </label>
               <label className="grid gap-1">
-                <span className="text-xs font-medium text-white/70">Location</span>
+                <span className="text-xs font-medium text-slate-600">Location</span>
                 <input
                   value={bannerLocation}
                   onChange={(e) => setBannerLocation(e.target.value)}
                   placeholder="Denver, CO"
-                  className="rounded-lg border border-white/15 bg-black/30 px-3 py-2 text-sm outline-none focus:border-white/40"
+                  className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#055bfb]"
                 />
               </label>
               <label className="grid gap-1">
-                <span className="text-xs font-medium text-white/70">CTA text</span>
+                <span className="text-xs font-medium text-slate-600">CTA text</span>
                 <input
                   value={bannerCtaText}
                   onChange={(e) => setBannerCtaText(e.target.value)}
                   placeholder="LET'S MEET"
                   maxLength={20}
-                  className="rounded-lg border border-white/15 bg-black/30 px-3 py-2 text-sm outline-none focus:border-white/40"
+                  className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#055bfb]"
                 />
               </label>
               <label className="grid gap-1">
-                <span className="text-xs font-medium text-white/70">CTA URL (→ QR)</span>
+                <span className="text-xs font-medium text-slate-600">CTA URL (→ QR)</span>
                 <input
                   value={bannerCtaUrl}
                   onChange={(e) => setBannerCtaUrl(e.target.value)}
                   placeholder="https://calendly.com/you/intro"
-                  className="rounded-lg border border-white/15 bg-black/30 px-3 py-2 text-sm outline-none focus:border-white/40"
+                  className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#055bfb]"
                 />
               </label>
               <label className="grid gap-1 sm:col-span-2">
-                <span className="text-xs font-medium text-white/70">
+                <span className="text-xs font-medium text-slate-600">
                   Welcome message{" "}
-                  <span className="text-white/40">
+                  <span className="text-slate-400">
                     (optional &mdash; banner crossfades between this and the event content every ~5s)
                   </span>
                 </span>
@@ -1090,7 +1091,7 @@ export default function Home() {
                   onChange={(e) => setBannerWelcomeText(e.target.value)}
                   placeholder="Welcome, Acme team! 👋"
                   maxLength={80}
-                  className="rounded-lg border border-white/15 bg-black/30 px-3 py-2 text-sm outline-none focus:border-white/40"
+                  className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#055bfb]"
                 />
               </label>
             </div>
@@ -1106,7 +1107,7 @@ export default function Home() {
         </button>
 
         {error && (
-          <p className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-300">
+          <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
             {error}
           </p>
         )}
@@ -1116,7 +1117,7 @@ export default function Home() {
         <section className="mt-10 grid gap-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <p className="text-sm text-white/60">Preview</p>
+              <p className="text-sm text-slate-500">Preview</p>
               <p className="text-lg font-medium">
                 {result.company_name}{" "}
                 <span
@@ -1124,13 +1125,13 @@ export default function Home() {
                   style={{ background: result.brand_color }}
                   title={result.brand_color}
                 />
-                <span className="ml-1 text-xs text-white/40">{result.brand_color}</span>
+                <span className="ml-1 text-xs text-slate-400">{result.brand_color}</span>
               </p>
             </div>
             <a
               href={mp4}
               download={`${result.slug}.mp4`}
-              className="rounded-lg bg-white px-4 py-2 font-semibold text-[#0a1626] transition hover:bg-white/90"
+              className="rounded-lg bg-white px-4 py-2 font-semibold text-[#0a1626] transition hover:bg-slate-100"
             >
               Download MP4
             </a>
@@ -1144,11 +1145,11 @@ export default function Home() {
             loop
             muted
             playsInline
-            className="aspect-video w-full rounded-xl border border-white/10 bg-black"
+            className="aspect-video w-full rounded-xl border border-slate-200 bg-black"
           />
 
-          <details className="rounded-lg border border-white/10 bg-white/[0.02] px-4 py-3 text-sm text-white/70">
-            <summary className="cursor-pointer font-medium text-white/80">
+          <details className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+            <summary className="cursor-pointer font-medium text-slate-700">
               How to use in Zoom
             </summary>
             <ol className="mt-2 list-decimal space-y-1 pl-5">
