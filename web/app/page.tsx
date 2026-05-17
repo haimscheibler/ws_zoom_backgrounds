@@ -719,12 +719,20 @@ export default function Home() {
             1920×1080 MP4 you can drop straight into Zoom.
           </p>
         </div>
-        <Link
-          href="/campaigns"
-          className="rounded-lg border border-white/15 px-3 py-1.5 text-sm text-white/80 transition hover:border-white/30 hover:text-white"
-        >
-          Manage campaigns →
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link
+            href="/meetings"
+            className="rounded-lg border border-white/15 px-3 py-1.5 text-sm text-white/80 transition hover:border-white/30 hover:text-white"
+          >
+            Meetings today →
+          </Link>
+          <Link
+            href="/campaigns"
+            className="rounded-lg border border-white/15 px-3 py-1.5 text-sm text-white/80 transition hover:border-white/30 hover:text-white"
+          >
+            Manage campaigns →
+          </Link>
+        </div>
       </header>
 
       <section className="mb-6 grid gap-2">

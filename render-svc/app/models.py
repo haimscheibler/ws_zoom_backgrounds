@@ -60,6 +60,73 @@ class CampaignCreate(BaseModel):
     expires_at: str = Field(default="", max_length=20)
 
 
+class MeetingAttendee(BaseModel):
+    """One attendee on a calendar invite. Email is the only required field —
+    name and company are populated by Apollo enrichment at render time."""
+    email: str = Field(min_length=3, max_length=200)
+    name: str = Field(default="", max_length=80)
+    company: str = Field(default="", max_length=80)
+
+
+class Meeting(BaseModel):
+    """A scheduled meeting whose background is pre-rendered ahead of the
+    start time. Mirrors what a calendar event would deliver in the Tier 3
+    auto-flow — for the MVP demo, users create these manually via the form
+    or the seed endpoint, but the rendering pipeline is identical to what
+    a real calendar trigger would invoke."""
+    id: str
+    title: str  # e.g. "Acme Corp / WiseStamp intro"
+    start_time: int  # unix seconds, UTC
+    duration_minutes: int = 30
+    attendees: list[MeetingAttendee] = []
+
+    # Render config — both per-meeting overridable
+    welcome_template: str = Field(
+        default="Welcome, {company} team! 👋", max_length=120,
+    )
+    plate: str = "office_studio"
+
+    # Render results (filled by /meetings/{id}/render)
+    render_status: str = "idle"           # idle | rendering | ready | failed
+    rendered_at: int = 0                  # unix seconds
+    rendered_mp4_url: str = ""
+    rendered_poster_url: str = ""
+    primary_company_name: str = ""        # resolved external company
+    primary_domain: str = ""
+    last_render_error: str = ""
+
+    created_at: int = 0
+    updated_at: int = 0
+
+
+class MeetingCreate(BaseModel):
+    """POST body for creating a meeting. id/timestamps/render-state are
+    server-assigned, not in the request."""
+    title: str = Field(min_length=1, max_length=120)
+    start_time: int  # unix seconds
+    duration_minutes: int = Field(default=30, ge=5, le=480)
+    attendees: list[MeetingAttendee] = []
+    welcome_template: str = Field(
+        default="Welcome, {company} team! 👋", max_length=120,
+    )
+    plate: str = "office_studio"
+
+
+class MeetingRenderRequest(BaseModel):
+    """The AE context for a meeting render. Sent on each /meetings/{id}/render
+    call so we never need to persist the AE's identity server-side
+    (avoids the auth question for the demo). Frontend stores it in
+    localStorage and forwards it per-request."""
+    full_name: str = Field(min_length=1, max_length=80)
+    title: str = Field(default="", max_length=120)
+    company_url: str = Field(min_length=3, max_length=200)
+    # Optional: the AE's domain. If unset, derived from company_url. Used to
+    # filter the AE's own colleagues out of the "external attendees" list
+    # when resolving which company the meeting is really with.
+    own_domain: str = Field(default="", max_length=120)
+    qr_url: str = Field(default="", max_length=400)
+
+
 class BackgroundRequest(BaseModel):
     """Input for /generate.
 

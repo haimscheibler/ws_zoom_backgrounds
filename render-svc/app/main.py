@@ -17,6 +17,7 @@ import asyncio
 import logging
 import os
 import re
+import time
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -26,18 +27,24 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from . import campaigns as campaigns_mod
+from . import meetings as meetings_mod
 from . import photo as photo_mod
 from . import plates as plates_mod
 from . import uploads as uploads_mod
 from .apollo import enrich as apollo_enrich
 from .body_bg import extract_body_bg
 from .brand_scraper import BrandAssets, brand_from_apollo, scrape_brand
+from .calendar import attendees as attendees_mod
 from .models import (
     BackgroundRequest,
     BackgroundResponse,
+    BannerConfig,
     BrandPreview,
     Campaign,
     CampaignCreate,
+    Meeting,
+    MeetingCreate,
+    MeetingRenderRequest,
     PlateOption,
 )
 from .render import OUTPUT_DIR_DEFAULT, render_background
@@ -170,6 +177,146 @@ def update_campaign(campaign_id: str, payload: CampaignCreate) -> Campaign:
 def delete_campaign(campaign_id: str) -> None:
     if not campaigns_mod.delete(campaign_id):
         raise HTTPException(status_code=404, detail="campaign not found")
+
+
+# ── Meetings (demo flow for the auto-updater) ────────────────────────────
+# Each meeting carries its own attendee list + welcome template. The render
+# orchestrator at /meetings/{id}/render resolves the primary external
+# company from the attendees, scrapes its display name for the welcome
+# message, then dispatches an internal /generate with a meeting-specific
+# BannerConfig. The AE's own branding (logo, colours, photo) comes from
+# the per-request MeetingRenderRequest — frontend stores it in localStorage.
+
+@app.get("/meetings", response_model=list[Meeting])
+def list_meetings() -> list[Meeting]:
+    return meetings_mod.list_all()
+
+
+@app.post("/meetings", response_model=Meeting, status_code=201)
+def create_meeting(payload: MeetingCreate) -> Meeting:
+    return meetings_mod.create(payload)
+
+
+@app.get("/meetings/{meeting_id}", response_model=Meeting)
+def get_meeting(meeting_id: str) -> Meeting:
+    m = meetings_mod.get(meeting_id)
+    if m is None:
+        raise HTTPException(status_code=404, detail="meeting not found")
+    return m
+
+
+@app.delete("/meetings/{meeting_id}", status_code=204)
+def delete_meeting(meeting_id: str) -> None:
+    if not meetings_mod.delete(meeting_id):
+        raise HTTPException(status_code=404, detail="meeting not found")
+
+
+@app.post("/meetings/seed", response_model=list[Meeting])
+def seed_meetings() -> list[Meeting]:
+    """Replace the meetings store with a fresh batch of demo meetings whose
+    start times are relative to *now*. Lets the demo always feel current
+    without re-seeding the database manually."""
+    return meetings_mod.seed_demo_meetings()
+
+
+@app.post("/meetings/{meeting_id}/render", response_model=Meeting)
+async def render_meeting(meeting_id: str, ae: MeetingRenderRequest) -> Meeting:
+    """Render this meeting's personalised background.
+
+    The full pipeline a real calendar-trigger would invoke:
+      1. Resolve which external company the meeting is *with* (skip the
+         AE's own colleagues; skip generic personal email domains; if
+         multiple external companies are present, take the one with the
+         most attendees).
+      2. Brand-scrape the external company for a usable display name.
+      3. Compose a banner with welcome_text rendered from the meeting's
+         template (e.g., "Welcome, Acme team! 👋"), event_name set to
+         the meeting title.
+      4. Dispatch the existing /generate pipeline with the AE's own
+         branding (their company URL drives colour/logo extraction).
+      5. Persist the rendered MP4 URLs back on the meeting record so the
+         UI can show ready/idle status without re-asking the server.
+    """
+    meeting = meetings_mod.get(meeting_id)
+    if meeting is None:
+        raise HTTPException(status_code=404, detail="meeting not found")
+
+    meetings_mod.update(meeting_id, render_status="rendering", last_render_error="")
+
+    try:
+        # 1. AE's own domain — explicit override or derive from URL
+        ae_domain = ae.own_domain or _extract_domain(ae.company_url)
+
+        # 2. Resolve primary external company from attendees
+        emails = [a.email for a in meeting.attendees]
+        resolution = attendees_mod.resolve(
+            emails,
+            organiser_email=f"{ae.full_name.lower().replace(' ', '.')}@{ae_domain}",
+            organiser_company_domain=ae_domain,
+            event_title=meeting.title,
+        )
+        if not resolution.primary_domain:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    "Could not resolve an external company from the attendees. "
+                    "Add at least one attendee whose email isn't your domain "
+                    "or a personal-email provider."
+                ),
+            )
+        log.info("    meeting %s: external company → %s (%s)",
+                 meeting_id, resolution.primary_domain, resolution.rationale)
+
+        # 3. Get the external company's display name. Quick scrape only —
+        #    not the full Apollo path (that runs inside /generate below
+        #    for the AE's *own* branding).
+        loop = asyncio.get_event_loop()
+        ext_brand = await loop.run_in_executor(
+            None, scrape_brand, resolution.primary_domain,
+        )
+        company_display = ext_brand.company_name or resolution.primary_domain
+
+        # 4. Compose meeting-specific banner
+        welcome = meeting.welcome_template.format(company=company_display)
+        banner = BannerConfig(
+            event_name=meeting.title,
+            cta_text="LET'S CONNECT",
+            cta_url=ae.qr_url,
+            welcome_text=welcome,
+        )
+
+        # 5. Dispatch /generate with AE's branding
+        bg_req = BackgroundRequest(
+            full_name=ae.full_name,
+            title=ae.title,
+            company_url=ae.company_url,
+            plate=meeting.plate or "office_studio",
+            qr_url=ae.qr_url,
+            qr_caption="Scan to connect",
+            banner=banner,
+        )
+        result = await generate(bg_req)
+
+        # 6. Persist render state
+        return meetings_mod.update(
+            meeting_id,
+            render_status="ready",
+            rendered_at=int(time.time()),
+            rendered_mp4_url=result.mp4_url,
+            rendered_poster_url=result.poster_url,
+            primary_company_name=company_display,
+            primary_domain=resolution.primary_domain,
+            last_render_error="",
+        )
+    except HTTPException as e:
+        meetings_mod.update(meeting_id, render_status="failed",
+                            last_render_error=str(e.detail))
+        raise
+    except Exception as e:
+        log.exception("meeting render failed: %s", meeting_id)
+        meetings_mod.update(meeting_id, render_status="failed",
+                            last_render_error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/preview-brand", response_model=BrandPreview)

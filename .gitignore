@@ -19,6 +19,9 @@ render-svc/app/.campaigns.json
 render-svc/app/.custom_plates.json
 render-svc/app/static/uploads/
 
+# Demo meetings store — per-deployment runtime state
+render-svc/app/.meetings.json
+
 # Node
 node_modules/
 .next/
